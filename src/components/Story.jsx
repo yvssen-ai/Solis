@@ -12,8 +12,8 @@ const STATS = [
 
 export default function Story() {
   const root = useRef(null);
-  const primary = img(2);
-  const secondary = img(1);
+  const primary = img(1); // the tagline wall inside
+  const secondary = img(3); // the cortado corner
 
   useGSAP(
     () => {
@@ -143,6 +143,10 @@ export default function Story() {
               We roast in small batches, whisk matcha to order, and press fruit the same
               morning it is served. Nothing sits. Nothing is reheated. If it is on the
               counter, it was made for today.
+            </p>
+            <p>
+              The line on the wall is not decoration. It is the whole idea: your sun will
+              rise from here.
             </p>
           </div>
 

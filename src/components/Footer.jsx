@@ -61,14 +61,14 @@ export default function Footer({ onNavigate }) {
                     y1={60 + Math.sin(a) * 34}
                     x2={60 + Math.cos(a) * 46}
                     y2={60 + Math.sin(a) * 46}
-                    stroke="var(--sun)"
+                    stroke="var(--white)"
                     strokeWidth="2.4"
                     strokeLinecap="round"
                   />
                 );
               })}
             </g>
-            <circle cx="60" cy="60" r="24" fill="var(--sun)" />
+            <circle cx="60" cy="60" r="24" fill="none" stroke="var(--white)" strokeWidth="2.6" />
           </svg>
           <p className="footer__blurb">
             Solis — cafe &amp; bakery. Coffee roasted here, dough folded here, everything

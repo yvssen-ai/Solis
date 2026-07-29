@@ -1,49 +1,51 @@
 /* ============================================================================
    SOLIS — BRAND TOKENS
    ----------------------------------------------------------------------------
-   ► THE ONE PLACE TO PUT YOUR LOGO COLOURS ◄
+   Every colour on the site derives from the block below.
 
-   Every colour on the site is derived from the nine values in the block below.
-   Change them and the whole site — buttons, glows, gradients, the sun, the
-   scroll progress bar, the menu — re-skins itself.
+   The brand colours are sampled directly from `solis logo.jpg`:
 
-   The current values are a sun-forward palette chosen for the name "Solis"
-   (Latin: of the sun): deep espresso darks, a golden primary, a terracotta
-   accent and a warm cream. Sample your logo and overwrite:
+     #2A4326   the logo's forest green (94.9% of the logo artwork)
+     #F7F9F7   the logo's white line art and lettering
 
-     --sun      the dominant/brightest colour in the logo   (primary)
-     --clay     the secondary or accent colour              (accent)
-     --ink      the darkest colour in the logo              (backgrounds)
-     --cream    the lightest colour in the logo             (text on dark)
+   The remaining values are supporting steps: darker and lighter greens for
+   layering, plus warm neutrals pulled from the photography — the cane chairs
+   and timber of the terrace, the concrete walls, the sage upholstery.
 
-   The remaining five are supporting steps between those four.
+   The logo is white line art on flat green, so the site follows it: deep green
+   surfaces, white type, and one warm "sun" accent for prices and highlights —
+   the brand line is "your sun will rise from here".
    ========================================================================== */
 
 :root {
-  /* ---- BRAND ------------------------------------------------------------ */
-  --ink: #140e06;
-  --espresso: #241708;
-  --bark: #3a2716;
-  --clay: #b7541f;
-  --sun: #e9a227;
-  --honey: #f3c46a;
-  --cream: #f7efe2;
-  --paper: #fdf8f0;
-  --matcha: #7c8b52;
+  /* ---- BRAND (sampled from the logo) ------------------------------------ */
+  --forest: #2a4326; /* the logo green, exact */
+  --white: #f7f9f7; /* the logo white, exact */
+
+  /* ---- SUPPORTING GREENS ------------------------------------------------ */
+  --ink: #14200f; /* deepest — page background */
+  --moss: #35502f; /* raised surfaces */
+  --sage: #7e8f63; /* muted green from the seat upholstery */
+
+  /* ---- WARM NEUTRALS (from the photography) ----------------------------- */
+  --sun: #d8a75e; /* cane / timber — the accent */
+  --honey: #ecc994; /* lighter step of the accent */
+  --paper: #f1efe9; /* warm off-white — light sections */
+  --stone: #c6c8c2; /* concrete */
 
   /* ---- SEMANTIC --------------------------------------------------------- */
   --bg: var(--ink);
-  --bg-alt: var(--espresso);
+  --bg-alt: var(--forest);
   --bg-light: var(--paper);
-  --fg: var(--cream);
-  --fg-dim: color-mix(in srgb, var(--cream) 62%, transparent);
-  --fg-faint: color-mix(in srgb, var(--cream) 34%, transparent);
+  --fg: var(--white);
+  --fg-dim: color-mix(in srgb, var(--white) 66%, transparent);
+  --fg-faint: color-mix(in srgb, var(--white) 38%, transparent);
   --fg-on-light: var(--ink);
-  --fg-on-light-dim: color-mix(in srgb, var(--ink) 66%, transparent);
-  --rule: color-mix(in srgb, var(--cream) 16%, transparent);
+  --fg-on-light-dim: color-mix(in srgb, var(--ink) 68%, transparent);
+  --rule: color-mix(in srgb, var(--white) 18%, transparent);
   --rule-light: color-mix(in srgb, var(--ink) 14%, transparent);
-  --primary: var(--sun);
-  --accent: var(--clay);
+  --primary: var(--white);
+  --accent: var(--sun);
 
   /* ---- TYPE ------------------------------------------------------------- */
   --font-display: 'Fraunces', 'Georgia', 'Times New Roman', serif;
@@ -72,5 +74,5 @@
   --radius: 14px;
   --radius-lg: 26px;
   --shadow-soft: 0 18px 60px -24px color-mix(in srgb, var(--ink) 90%, transparent);
-  --glow: 0 0 90px -10px color-mix(in srgb, var(--sun) 55%, transparent);
+  --glow: 0 0 90px -10px color-mix(in srgb, var(--sun) 45%, transparent);
 }

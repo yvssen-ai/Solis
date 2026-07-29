@@ -3,42 +3,52 @@ import { gsap, useGSAP, ScrollTrigger, prefersReducedMotion } from '../lib/gsap'
 import { img } from '../data/images';
 import { CURRENCY, formatPrice } from '../data/menu';
 
+/**
+ * `image` indexes into the gallery (see src/data/images.js) so every card shows
+ * the photograph that actually belongs to it rather than whatever came next.
+ */
 const PICKS = [
   {
-    name: 'Sun Set',
+    name: 'Sausage Egg',
     price: 265,
-    kind: 'Signature',
-    blurb: 'The one we named the place for. Layered, citrus-forward, poured over a slow-melt sphere.',
+    kind: 'Breakfast',
+    image: 2,
+    blurb: 'Eggs over toast, sausage, a bright salad on the side. Best eaten in the sun.',
   },
   {
-    name: 'Blended Pistachio Matcha',
-    price: 265,
+    name: 'Ice Matcha',
+    price: 160,
     kind: 'Signature',
-    blurb: 'Ceremonial matcha spun with roasted pistachio until it turns to velvet.',
+    image: 4,
+    blurb: 'Japanese ceremonial grade, whisked thin and poured straight over ice.',
   },
   {
-    name: 'Banoffee Latte',
-    price: 245,
-    kind: 'Signature',
-    blurb: 'Banana, burnt caramel, double shot. Dessert that still tastes like coffee.',
+    name: 'Ice Spanish Latte',
+    price: 160,
+    kind: 'Ice Coffee',
+    image: 3,
+    blurb: 'Sweetened condensed milk, double shot, built cold. Our most ordered cup.',
   },
   {
-    name: 'Roast Beef Croissant',
+    name: 'Egg Benedict Smoked Salmon',
     price: 385,
-    kind: 'Bakery',
-    blurb: 'Seventy-two hour dough, slow-roasted beef, sharp mustard butter.',
-  },
-  {
-    name: 'Cherry Matcha Cloud',
-    price: 235,
-    kind: 'Matcha',
-    blurb: 'Whisked thin, capped with cherry cream that collapses into it as you drink.',
+    kind: 'Breakfast',
+    image: 5,
+    blurb: 'Everything on this plate was assembled after you ordered it.',
   },
   {
     name: 'Colombia Infused Peach',
     price: 1450,
     kind: 'Retail — 250g',
+    image: 6,
     blurb: 'Our loudest lot. Co-fermented with peach, and it does not whisper about it.',
+  },
+  {
+    name: 'Sun Set',
+    price: 265,
+    kind: 'Signature',
+    image: 7,
+    blurb: 'The one we named the place for. Order it late and take the corner table.',
   },
 ];
 
@@ -146,7 +156,7 @@ export default function Showcase() {
       <div className="showcase__viewport">
         <div className="showcase__track" ref={track}>
           {PICKS.map((pick, i) => {
-            const image = img(i + 1);
+            const image = img(pick.image);
             return (
               <article className="pick" key={pick.name}>
                 <div className="pick__media">

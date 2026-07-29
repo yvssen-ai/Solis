@@ -17,7 +17,7 @@ const DETAILS = [
 
 export default function Visit() {
   const root = useRef(null);
-  const media = img(6);
+  const media = img(7); // the two chairs, late afternoon
 
   useGSAP(
     () => {
@@ -78,7 +78,7 @@ export default function Visit() {
   return (
     <section className="section visit" id="visit" ref={root}>
       <svg className="visit__sun" viewBox="0 0 300 300" aria-hidden="true">
-        <circle cx="150" cy="150" r="70" fill="var(--clay)" opacity="0.35" />
+        <circle cx="150" cy="150" r="70" fill="none" stroke="var(--white)" strokeWidth="4" opacity="0.3" />
         {Array.from({ length: 20 }, (_, i) => {
           const a = (Math.PI * 2 * i) / 20;
           return (
@@ -88,7 +88,7 @@ export default function Visit() {
               y1={150 + Math.sin(a) * 88}
               x2={150 + Math.cos(a) * 118}
               y2={150 + Math.sin(a) * 118}
-              stroke="var(--clay)"
+              stroke="var(--white)"
               strokeWidth="4"
               strokeLinecap="round"
               opacity="0.3"

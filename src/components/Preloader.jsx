@@ -102,7 +102,7 @@ export default function Preloader({ onDone }) {
 
       <div className="preloader__inner">
         <svg className="preloader__mark" viewBox="0 0 120 52" fill="none">
-          <g ref={raysRef} stroke="var(--sun)" strokeWidth="2.2" strokeLinecap="round">
+          <g ref={raysRef} stroke="var(--white)" strokeWidth="2.2" strokeLinecap="round">
             {Array.from({ length: 12 }, (_, i) => {
               const a = (Math.PI / 11) * i + Math.PI;
               return (
@@ -116,11 +116,11 @@ export default function Preloader({ onDone }) {
               );
             })}
           </g>
-          <circle className="preloader__disc" cx="60" cy="40" r="14" fill="var(--sun)" />
+          <circle className="preloader__disc" cx="60" cy="40" r="13" fill="none" stroke="var(--white)" strokeWidth="2.4" />
           <path
             className="preloader__horizon"
             d="M32 40 H 88"
-            stroke="var(--sun)"
+            stroke="var(--white)"
             strokeWidth="2.6"
             strokeLinecap="round"
           />

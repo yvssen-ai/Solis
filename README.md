@@ -13,56 +13,52 @@ npm run preview
 
 ---
 
-## ⚠️ The logo and the 7 photographs are not in this repository
+## Brand
 
-The repo was empty when this site was built — no commits, no assets — so there
-was nothing to sample the brand colours from and nothing to put in the gallery.
-Everything below is wired up and waiting; both handoffs are drop-in and need
-**no code changes**.
+Everything is keyed to the real logo, sampled directly from `solis logo.jpg`:
 
-### 1. Add the photographs
-
-Drop the seven images into `src/assets/gallery/`. They are picked up
-automatically by a glob in `src/data/images.js`, sorted by filename, and
-distributed across the hero, story, showcase, gallery and visit sections.
-
-```
-src/assets/gallery/
-  01-storefront.jpg     ← becomes the hero
-  02-….jpg
-  …
-  07-….jpg
-```
-
-- Supported: `.jpg .jpeg .png .webp .avif .svg`
-- The number prefix controls the order — `01-` is the hero image.
-- **Delete the seven placeholder `.svg` files that are in there now**, otherwise
-  you will have fourteen images.
-
-### 2. Add the logo
-
-Save it as `src/assets/brand-logo.svg` (or `.png` / `.webp`). It replaces the
-built-in placeholder mark in the nav automatically.
-
-### 3. Set the brand colours
-
-Open `src/styles/tokens.css`. The first block is the entire palette — nine
-values, all documented. Sample the logo and overwrite four of them:
-
-| Token | What to put there |
+| | |
 | --- | --- |
-| `--sun` | the dominant / brightest colour in the logo (primary) |
-| `--clay` | the secondary or accent colour |
-| `--ink` | the darkest colour in the logo (page backgrounds) |
-| `--cream` | the lightest colour (text on dark) |
+| `#2A4326` | the logo's forest green — 94.9% of the artwork |
+| `#F7F9F7` | the logo's white line art and lettering |
 
-Everything else on the site — buttons, the animated suns, gradients, the scroll
-dial, the menu, the footer wordmark — is derived from those, so the whole site
-re-skins in one edit.
+Those two, plus supporting greens and warm neutrals lifted from the photography
+(cane chairs, concrete walls, sage upholstery), live in `src/styles/tokens.css`.
+That file is the only place colour is defined — change a token and the whole
+site re-skins.
 
-The palette shipped today is a sun-forward interpretation of the name *Solis*
-(Latin, "of the sun"): espresso darks, a golden primary, terracotta accent,
-warm cream.
+The logo is white line art on flat green, so the site follows it: deep green
+surfaces, white type, thin-line suns drawn to match the mark in the wordmark,
+and one warm accent for prices and labels. The brand line — *your sun will rise
+from here* — is the hero headline, and the sun rises out of the bottom edge
+behind it.
+
+### The logo files
+
+`src/assets/brand-logo.png` is the supplied logo chroma-keyed off its flat green
+background, so the white line art drops cleanly onto any surface;
+`brand-lockup.png` is the same with the tagline. Both are generated from
+`solis logo.jpg`. `<Logo />` uses them automatically — pass `invert` to render
+in brand green on light sections.
+
+### The photographs
+
+The eight supplied photos live in `src/assets/gallery/`, renamed so their order
+is explicit. They are globbed by `src/data/images.js`, so adding or replacing a
+file is all that is needed — no code change.
+
+```
+01-storefront.jpg                    → hero
+02-your-sun-will-rise-from-here.jpg  → story
+03-breakfast-in-the-sun.jpg          → showcase
+04-cortado-corner.jpg                → story + showcase
+05-iced-matcha-and-coffee.jpg        → showcase
+06-from-the-kitchen.jpg              → showcase
+07-cookie-tin.jpg                    → showcase
+08-two-chairs.jpg                    → visit
+```
+
+All eight also appear in the gallery grid.
 
 ---
 
@@ -81,7 +77,7 @@ src/
     Preloader.jsx          sunrise reveal: rays draw, counter, slat wipe
     Nav.jsx                hide-on-scroll bar + full-screen overlay menu
     ScrollProgress.jsx     sun dial that fills with reading progress
-    Hero.jsx               parallax photo, rotating sun, per-letter entrance
+    Hero.jsx               parallax photo, sun rising from the edge, word reveal
     Marquee.jsx            two ribbons; scroll velocity drives speed/direction
     Story.jsx              masked line reveals, clip-path image wipes, counters
     Showcase.jsx           pinned section, vertical scroll → horizontal travel
@@ -139,12 +135,18 @@ the UI.
 Evergreen Chrome, Safari, Firefox and their mobile counterparts. Uses
 `color-mix()`, `clamp()`, `100svh`, `aspect-ratio` and `backdrop-filter`.
 
-## Placeholder content to replace
+## Still invented — replace before launch
 
-Alongside the images and logo, these are invented and need real values:
+The logo, photography and menu are real. These are not:
 
 - Address, phone, email and social links — `src/components/Visit.jsx` and
   `src/components/Footer.jsx`
 - Opening hours — `Visit.jsx`, `Footer.jsx`, `Nav.jsx`, `Hero.jsx`
 - The "Open in maps" link — `Visit.jsx`
 - Section copy in `Story.jsx` and the six blurbs in `Showcase.jsx`
+
+## Deploying
+
+Vercel auto-detects Vite: build `npm run build`, output `dist`. Nothing else to
+configure. Note that Vercel builds the **production branch** — if the site 404s
+with `NOT_FOUND`, the branch it is building does not contain this code.

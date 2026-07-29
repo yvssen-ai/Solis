@@ -132,8 +132,9 @@ h4 {
   flex: none;
 }
 
+/* Gold on off-white is too low-contrast; the brand green carries it instead. */
 .section--light .eyebrow {
-  color: var(--clay);
+  color: var(--forest);
 }
 
 .lede {
@@ -229,7 +230,7 @@ h4 {
 }
 
 .btn--ghost::after {
-  background: var(--cream);
+  background: var(--white);
 }
 
 @media (hover: hover) {

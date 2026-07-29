@@ -113,8 +113,7 @@ export default function Nav({ onNavigate }) {
           }}
           aria-label="Solis — back to top"
         >
-          <Logo withWordmark={false} className="nav__logo" />
-          <span className="nav__brandname">Solis</span>
+          <Logo className="nav__logo" />
         </a>
 
         <div className="nav__right">
@@ -139,7 +138,7 @@ export default function Nav({ onNavigate }) {
         <div className="nav__panel-bg" />
 
         <svg className="nav__sun" viewBox="0 0 200 200" aria-hidden="true">
-          <circle cx="100" cy="100" r="46" fill="var(--sun)" opacity="0.9" />
+          <circle cx="100" cy="100" r="46" fill="none" stroke="var(--white)" strokeWidth="3" opacity="0.9" />
           {Array.from({ length: 24 }, (_, i) => {
             const a = (Math.PI * 2 * i) / 24;
             return (
@@ -149,7 +148,7 @@ export default function Nav({ onNavigate }) {
                 y1={100 + Math.sin(a) * 58}
                 x2={100 + Math.cos(a) * 74}
                 y2={100 + Math.sin(a) * 74}
-                stroke="var(--sun)"
+                stroke="var(--white)"
                 strokeWidth="3"
                 strokeLinecap="round"
                 opacity="0.55"

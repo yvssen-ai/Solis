@@ -2,7 +2,9 @@ import { useRef } from 'react';
 import { gsap, useGSAP, prefersReducedMotion } from '../lib/gsap';
 import { img } from '../data/images';
 
-const TITLE = 'SOLIS';
+/* The brand line is the headline — the wordmark is already in the nav and on
+   the storefront behind it, so repeating it a third time only competes. */
+const TITLE = ['Your', 'sun', 'will', 'rise', 'from', 'here'];
 
 export default function Hero({ loaded, onNavigate }) {
   const root = useRef(null);
@@ -23,14 +25,14 @@ export default function Hero({ loaded, onNavigate }) {
         )
           .fromTo(
             '.hero__sun',
-            { scale: 0.3, autoAlpha: 0, y: 120 },
-            { scale: 1, autoAlpha: 1, y: 0, duration: 1.9 },
+            { scale: 0.72, opacity: 0, y: 160 },
+            { scale: 1, opacity: 0.45, y: 0, duration: 2.1 },
             0.15
           )
           .fromTo(
             '.hero__char',
-            { yPercent: 118, rotate: 6 },
-            { yPercent: 0, rotate: 0, duration: 1.15, stagger: 0.075 },
+            { yPercent: 118 },
+            { yPercent: 0, duration: 1.15, stagger: 0.085 },
             0.35
           )
           .fromTo(
@@ -79,7 +81,8 @@ export default function Hero({ loaded, onNavigate }) {
           },
         })
         .to('.hero__title', { yPercent: -55, autoAlpha: 0.15, ease: 'none' }, 0)
-        .to('.hero__sun', { yPercent: 45, scale: 0.75, autoAlpha: 0.25, ease: 'none' }, 0)
+        /* It keeps rising as you leave. */
+        .to('.hero__sun', { yPercent: -28, ease: 'none' }, 0)
         .to('.hero__foot', { autoAlpha: 0, y: 40, ease: 'none' }, 0)
         .to('.hero__scrim', { opacity: 0.95, ease: 'none' }, 0);
 
@@ -111,36 +114,35 @@ export default function Hero({ loaded, onNavigate }) {
         <div className="hero__grain" />
       </div>
 
+      {/* Drawn to match the logo: an open thin-line circle with straight rays. */}
       <svg className="hero__sun" viewBox="0 0 400 400" aria-hidden="true">
         <defs>
           <radialGradient id="heroGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="var(--honey)" stopOpacity="0.5" />
-            <stop offset="60%" stopColor="var(--sun)" stopOpacity="0.16" />
+            <stop offset="0%" stopColor="var(--honey)" stopOpacity="0.34" />
+            <stop offset="55%" stopColor="var(--sun)" stopOpacity="0.12" />
             <stop offset="100%" stopColor="var(--sun)" stopOpacity="0" />
           </radialGradient>
         </defs>
         <circle className="hero__glow" cx="200" cy="200" r="190" fill="url(#heroGlow)" />
         <g className="hero__rays">
-          {Array.from({ length: 36 }, (_, i) => {
-            const a = (Math.PI * 2 * i) / 36;
-            const long = i % 3 === 0;
+          {Array.from({ length: 24 }, (_, i) => {
+            const a = (Math.PI * 2 * i) / 24;
             return (
               <line
                 key={i}
-                x1={200 + Math.cos(a) * 118}
-                y1={200 + Math.sin(a) * 118}
-                x2={200 + Math.cos(a) * (long ? 172 : 146)}
-                y2={200 + Math.sin(a) * (long ? 172 : 146)}
-                stroke="var(--sun)"
-                strokeWidth={long ? 3 : 1.6}
+                x1={200 + Math.cos(a) * 122}
+                y1={200 + Math.sin(a) * 122}
+                x2={200 + Math.cos(a) * 158}
+                y2={200 + Math.sin(a) * 158}
+                stroke="var(--white)"
+                strokeWidth="3"
                 strokeLinecap="round"
-                opacity={long ? 0.7 : 0.4}
+                opacity="0.75"
               />
             );
           })}
         </g>
-        <circle cx="200" cy="200" r="96" fill="var(--sun)" opacity="0.16" />
-        <circle cx="200" cy="200" r="96" fill="none" stroke="var(--sun)" strokeWidth="1.5" opacity="0.5" />
+        <circle cx="200" cy="200" r="100" fill="none" stroke="var(--white)" strokeWidth="3.5" opacity="0.85" />
       </svg>
 
       <div className="hero__body shell">
@@ -149,11 +151,11 @@ export default function Hero({ loaded, onNavigate }) {
         </p>
 
         <h1 className="hero__title">
-          <span className="sr-only">Solis</span>
+          <span className="sr-only">Solis — your sun will rise from here</span>
           <span className="hero__title-row" aria-hidden="true">
-            {TITLE.split('').map((c, i) => (
+            {TITLE.map((word, i) => (
               <span className="hero__char-wrap" key={i}>
-                <span className="hero__char">{c}</span>
+                <span className="hero__char">{word}</span>
               </span>
             ))}
           </span>

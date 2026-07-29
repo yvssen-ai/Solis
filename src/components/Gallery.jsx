@@ -2,6 +2,13 @@ import { useRef, useState } from 'react';
 import { gsap, useGSAP, ScrollTrigger, prefersReducedMotion } from '../lib/gsap';
 import { gallery } from '../data/images';
 
+/**
+ * Every third tile runs double width, so each group of three fills its rows
+ * exactly. The final tile is widened too when it would otherwise be stranded
+ * alone next to a gap — that keeps the grid whole for any number of photos.
+ */
+const isWide = (i, total) => i % 3 === 0 || (i === total - 1 && i % 3 === 1);
+
 export default function Gallery() {
   const root = useRef(null);
   const lightbox = useRef(null);
@@ -129,7 +136,7 @@ export default function Gallery() {
         <div className="gallery__grid">
           {gallery.map((image, i) => (
             <button
-              className={`tile ${i % 3 === 0 ? 'tile--wide' : ''}`}
+              className={`tile ${isWide(i, gallery.length) ? 'tile--wide' : ''}`}
               key={image.id}
               onClick={(e) => open(e, i)}
               aria-label={`View ${image.caption}`}
