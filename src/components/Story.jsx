@@ -135,20 +135,7 @@ export default function Story() {
           </h2>
 
           <div className="story__copy">
-            <p>
-              Solis starts in the dark. Dough that has been resting cold for three days goes
-              into the oven at four, the roaster comes up to temperature by five, and the
-              first tray of croissants is out before the sky changes colour.
-            </p>
-            <p>
-              We roast in small batches, whisk matcha to order, and press fruit the same
-              morning it is served. Nothing sits. Nothing is reheated. If it is on the
-              counter, it was made for today.
-            </p>
-            <p>
-              The line on the wall is not decoration. It is the whole idea: your sun will
-              rise from here.
-            </p>
+            <p>Dough rests three days, the ovens go on at four, and nothing sits.</p>
           </div>
 
           <div className="story__signature">
