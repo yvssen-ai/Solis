@@ -1,0 +1,258 @@
+/* ============================================================================
+   MENU
+   Mobile-first: a sticky, horizontally scrollable category rail sits above a
+   single-column price list. The list becomes two columns from tablet up.
+   ========================================================================== */
+
+.menu {
+  position: relative;
+  background: linear-gradient(180deg, var(--ink) 0%, var(--espresso) 55%, var(--ink) 100%);
+  padding-bottom: clamp(3.5rem, 10vw, 6rem);
+}
+
+.menu__head {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: clamp(2rem, 7vw, 3.5rem);
+}
+
+.menu__title {
+  font-size: var(--t-2xl);
+  max-width: 16ch;
+}
+
+@media (min-width: 900px) {
+  .menu__title {
+    font-size: var(--t-3xl);
+  }
+}
+
+.menu__rail-sentinel {
+  display: block;
+  height: 1px;
+}
+
+/* ---- Category rail ------------------------------------------------------- */
+
+/* The opaque surface lives on the wrapper: a mask-image on the same element as
+   backdrop-filter cancels the blur in several browsers, so the two are split
+   across two elements. */
+.menu__rail-wrap {
+  position: sticky;
+  top: calc(env(safe-area-inset-top) + 58px);
+  z-index: 20;
+  margin-bottom: clamp(1.6rem, 5vw, 2.5rem);
+  background: color-mix(in srgb, var(--ink) 92%, transparent);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+
+.menu__rail {
+  position: relative;
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.5rem var(--gutter);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  border-block: 1px solid transparent;
+  transition: border-color 0.4s var(--ease-out);
+  /* Fade the edges so cut-off chips read as scrollable */
+  mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+}
+
+.menu__rail::-webkit-scrollbar {
+  display: none;
+}
+
+.menu__rail.is-stuck {
+  border-block-color: var(--rule);
+}
+
+.menu__indicator {
+  position: absolute;
+  top: 0.5rem;
+  left: 0;
+  height: calc(100% - 1rem);
+  border-radius: 999px;
+  background: var(--sun);
+  pointer-events: none;
+  width: 0;
+}
+
+.menu__chip {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  min-height: 42px;
+  padding: 0.55rem 1.05rem;
+  border-radius: 999px;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--fg-dim);
+  transition: color 0.35s var(--ease-out);
+}
+
+.menu__chip.is-active {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.menu__chip-count {
+  font-size: 0.68em;
+  letter-spacing: 0.1em;
+  padding: 0.15em 0.5em;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cream) 12%, transparent);
+  transition: background-color 0.35s var(--ease-out);
+}
+
+.menu__chip.is-active .menu__chip-count {
+  background: color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+/* ---- Panel --------------------------------------------------------------- */
+
+.menu__panel {
+  min-height: 46svh;
+}
+
+.menu__panel-head {
+  display: grid;
+  gap: 0.4rem;
+  padding-bottom: 1.4rem;
+  margin-bottom: 1.2rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.menu__panel-title {
+  font-size: var(--t-xl);
+  color: var(--cream);
+}
+
+.menu__panel-tagline {
+  font-size: var(--t-xs);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--sun);
+}
+
+.menu__panel-note {
+  font-size: var(--t-sm);
+  color: var(--fg-dim);
+  max-width: 52ch;
+  text-wrap: pretty;
+}
+
+.menu__list {
+  list-style: none;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.menu__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 0.55rem;
+  padding-block: 0.85rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--cream) 8%, transparent);
+}
+
+.menu__name {
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-weight: 400;
+  line-height: 1.15;
+  color: var(--cream);
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5em;
+}
+
+.menu__meta {
+  font-family: var(--font-body);
+  font-size: 0.58em;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+
+.menu__flag {
+  font-family: var(--font-body);
+  font-size: 0.5em;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--sun);
+  padding: 0.35em 0.7em;
+  border-radius: 999px;
+  transform: translateY(-0.15em);
+}
+
+.menu__leader {
+  height: 1px;
+  align-self: center;
+  background: repeating-linear-gradient(
+    to right,
+    color-mix(in srgb, var(--cream) 26%, transparent) 0 2px,
+    transparent 2px 7px
+  );
+  transform-origin: left center;
+}
+
+.menu__price {
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  color: var(--honey);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.menu__currency {
+  font-family: var(--font-body);
+  font-size: 0.6em;
+  letter-spacing: 0.08em;
+  color: var(--fg-faint);
+  margin-right: 0.3em;
+}
+
+.menu__disclaimer {
+  margin-top: clamp(2rem, 6vw, 3rem);
+  font-size: var(--t-xs);
+  letter-spacing: 0.08em;
+  color: var(--fg-faint);
+  max-width: 52ch;
+}
+
+@media (min-width: 760px) {
+  .menu__list {
+    grid-template-columns: repeat(2, 1fr);
+    column-gap: clamp(2rem, 5vw, 4rem);
+  }
+}
+
+@media (min-width: 1100px) {
+  .menu__panel {
+    display: grid;
+    grid-template-columns: 0.8fr 2fr;
+    gap: clamp(2rem, 5vw, 4rem);
+    align-items: start;
+  }
+
+  .menu__panel-head {
+    position: sticky;
+    top: 190px;
+    border-bottom: 0;
+    padding-bottom: 0;
+    margin-bottom: 0;
+  }
+}

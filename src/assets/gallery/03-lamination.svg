@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1500" width="1200" height="1500" role="img" aria-label="Lamination, 4am">
+  <defs>
+    <linearGradient id="bg-3" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0%" stop-color="#B7541F" />
+      <stop offset="100%" stop-color="#3A2716" />
+    </linearGradient>
+    <radialGradient id="glow-3" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#F3C46A" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#F3C46A" stop-opacity="0" />
+    </radialGradient>
+    
+  <filter id="soft-3" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur stdDeviation="40" />
+  </filter>
+    
+  <filter id="grain-3" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" seed="21" />
+    <feColorMatrix type="saturate" values="0" />
+    <feComponentTransfer><feFuncA type="linear" slope="0.16" /></feComponentTransfer>
+    <feBlend in2="SourceGraphic" mode="overlay" />
+  </filter>
+  </defs>
+  <rect width="1200" height="1500" fill="url(#bg-3)" />
+  <g filter="url(#grain-3)">
+      <g opacity="0.9">
+        <rect x="140" y="320" width="920" height="72" rx="36" fill="#F7EFE2" opacity="0.85" /><rect x="154" y="440" width="892" height="72" rx="36" fill="#F3C46A" opacity="0.78" /><rect x="168" y="560" width="864" height="72" rx="36" fill="#F7EFE2" opacity="0.71" /><rect x="182" y="680" width="836" height="72" rx="36" fill="#F3C46A" opacity="0.6399999999999999" /><rect x="196" y="800" width="808" height="72" rx="36" fill="#F7EFE2" opacity="0.57" /><rect x="210" y="920" width="780" height="72" rx="36" fill="#F3C46A" opacity="0.49999999999999994" /><rect x="224" y="1040" width="752" height="72" rx="36" fill="#F7EFE2" opacity="0.42999999999999994" />
+      </g>
+      <circle cx="905" cy="270" r="150" fill="#E9A227" opacity="0.9" filter="url(#soft-3)" /></g>
+  <rect width="1200" height="1500" fill="none" />
+</svg>
