@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { gsap, useGSAP, prefersReducedMotion } from '../lib/gsap';
+import { gsap, useGSAP, ScrollTrigger, prefersReducedMotion } from '../lib/gsap';
 
 const LINKS = [
   { id: '#story', label: 'Story' },
@@ -35,13 +35,23 @@ export default function Footer({ onNavigate }) {
         scrollTrigger: { trigger: '.footer__top', start: 'top 92%' },
       });
 
-      gsap.to('.footer__rays', {
+      /* Only spins while the footer is on screen — otherwise it repaints for
+         the entire time you are anywhere else on the page. */
+      const rays = gsap.to('.footer__rays', {
         rotate: -360,
         duration: 90,
         repeat: -1,
         ease: 'none',
         transformOrigin: '50% 50%',
       });
+
+      const footerVisible = ScrollTrigger.create({
+        trigger: root.current,
+        start: 'top bottom',
+        end: 'bottom top',
+        onToggle: (self) => (self.isActive ? rays.play() : rays.pause()),
+      });
+      footerVisible.isActive ? rays.play() : rays.pause();
     },
     { scope: root }
   );

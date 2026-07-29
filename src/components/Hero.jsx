@@ -1,6 +1,7 @@
 import { useRef } from 'react';
-import { gsap, useGSAP, prefersReducedMotion } from '../lib/gsap';
+import { gsap, useGSAP, ScrollTrigger, prefersReducedMotion } from '../lib/gsap';
 import { img } from '../data/images';
+import Photo from './Photo';
 
 /* The brand line is the headline — the wordmark is already in the nav and on
    the storefront behind it, so repeating it a third time only competes. */
@@ -52,23 +53,24 @@ export default function Hero({ loaded, onNavigate }) {
 
       if (reduced) return;
 
-      /* ---- The sun keeps turning, always ---- */
-      gsap.to('.hero__rays', {
-        rotate: 360,
-        duration: 120,
-        repeat: -1,
-        ease: 'none',
-        transformOrigin: '50% 50%',
-      });
-
-      gsap.to('.hero__glow', {
-        scale: 1.12,
-        opacity: 0.75,
-        duration: 4.5,
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
-      });
+      /* ---- The sun keeps turning while you can see it ---- */
+      const idle = [
+        gsap.to('.hero__rays', {
+          rotate: 360,
+          duration: 120,
+          repeat: -1,
+          ease: 'none',
+          transformOrigin: '50% 50%',
+        }),
+        gsap.to('.hero__glow', {
+          scale: 1.12,
+          opacity: 0.75,
+          duration: 4.5,
+          repeat: -1,
+          yoyo: true,
+          ease: 'sine.inOut',
+        }),
+      ];
 
       /* ---- Scroll-out: title lifts, sun sets, image dims ---- */
       gsap
@@ -95,13 +97,26 @@ export default function Hero({ loaded, onNavigate }) {
       });
 
       /* Bobbing scroll cue */
-      gsap.to('.hero__cue-dot', {
-        y: 16,
-        duration: 1.3,
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
+      idle.push(
+        gsap.to('.hero__cue-dot', {
+          y: 16,
+          duration: 1.3,
+          repeat: -1,
+          yoyo: true,
+          ease: 'sine.inOut',
+        })
+      );
+
+      /* Those three loops repeat forever. Left running they keep writing
+         transforms — and repainting a 24-line SVG — for the whole length of the
+         page, long after the hero has scrolled away. */
+      const heroVisible = ScrollTrigger.create({
+        trigger: root.current,
+        start: 'top bottom',
+        end: 'bottom top',
+        onToggle: (self) => idle.forEach((t) => (self.isActive ? t.play() : t.pause())),
       });
+      idle.forEach((t) => (heroVisible.isActive ? t.play() : t.pause()));
     },
     { scope: root, dependencies: [loaded] }
   );
@@ -109,7 +124,7 @@ export default function Hero({ loaded, onNavigate }) {
   return (
     <section className="hero" id="top" ref={root}>
       <div className="hero__media">
-        {hero && <img className="hero__img" src={hero.src} alt={hero.alt} fetchpriority="high" />}
+        {hero && <Photo image={hero} className="hero__img" sizes="100vw" fetchpriority="high" />}
         <div className="hero__scrim" />
         <div className="hero__grain" />
       </div>

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { gsap, useGSAP, ScrollTrigger, prefersReducedMotion } from '../lib/gsap';
 import { gallery } from '../data/images';
+import Photo from './Photo';
 
 /**
  * Every third tile runs double width, so each group of three fills its rows
@@ -141,7 +142,15 @@ export default function Gallery() {
               onClick={(e) => open(e, i)}
               aria-label={`View ${image.caption}`}
             >
-              <img src={image.src} alt={image.alt} loading="lazy" />
+              <Photo
+                image={image}
+                sizes={
+                  isWide(i, gallery.length)
+                    ? '(min-width: 760px) 50vw, 100vw'
+                    : '(min-width: 760px) 25vw, 50vw'
+                }
+                loading="lazy"
+              />
               <span className="tile__index">{String(i + 1).padStart(2, '0')}</span>
               <span className="tile__caption">{image.caption}</span>
             </button>

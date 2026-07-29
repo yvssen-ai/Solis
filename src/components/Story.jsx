@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { gsap, useGSAP, splitLines, prefersReducedMotion } from '../lib/gsap';
 import { img } from '../data/images';
 import { menu, totalItems } from '../data/menu';
+import Photo from './Photo';
 
 const STATS = [
   { value: 4, suffix: 'AM', label: 'The ovens go on' },
@@ -157,10 +158,10 @@ export default function Story() {
 
         <div className="story__media">
           <figure className="story__frame story__frame--tall" data-speed="0.92">
-            {primary && <img src={primary.src} alt={primary.alt} loading="lazy" />}
+            {primary && <Photo image={primary} sizes="(min-width: 900px) 25vw, 45vw" loading="lazy" />}
           </figure>
           <figure className="story__frame story__frame--short" data-speed="1.08">
-            {secondary && <img src={secondary.src} alt={secondary.alt} loading="lazy" />}
+            {secondary && <Photo image={secondary} sizes="(min-width: 900px) 25vw, 45vw" loading="lazy" />}
           </figure>
         </div>
       </div>

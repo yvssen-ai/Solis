@@ -26,14 +26,48 @@ const captionFromPath = (path) => {
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
+/**
+ * Downscaled copies live in `src/assets/gallery/sized/` as `<name>-<width>.jpg`
+ * and are generated from the originals (see README). The glob above is not
+ * recursive, so they never show up as extra gallery entries.
+ *
+ * They matter on phones: the originals are 1080–1440px wide and were being
+ * painted into cards a third that size, so every one of them cost several
+ * megabytes of decoded bitmap for pixels nobody could see.
+ */
+const sizedModules = import.meta.glob('../assets/gallery/sized/*.{jpg,jpeg,png,webp}', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
+
+const variantsByBase = {};
+for (const path of Object.keys(sizedModules)) {
+  const file = path.split('/').pop().replace(/\.[^.]+$/, '');
+  const match = file.match(/^(.*)-(\d+)$/);
+  if (!match) continue;
+  (variantsByBase[match[1]] ||= []).push({ w: Number(match[2]), url: sizedModules[path] });
+}
+Object.values(variantsByBase).forEach((v) => v.sort((a, b) => a.w - b.w));
+
+const baseName = (path) => path.split('/').pop().replace(/\.[^.]+$/, '');
+
 export const gallery = Object.keys(galleryModules)
   .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-  .map((path, index) => ({
-    id: index,
-    src: galleryModules[path],
-    alt: `Solis — ${captionFromPath(path)}`,
-    caption: captionFromPath(path),
-  }));
+  .map((path, index) => {
+    const variants = variantsByBase[baseName(path)] ?? [];
+    return {
+      id: index,
+      src: galleryModules[path],
+      /* Full-size original stays as the `src` fallback, so a browser without
+         srcset support still gets a working image. */
+      srcSet: variants.length
+        ? variants.map((v) => `${v.url} ${v.w}w`).join(', ')
+        : null,
+      alt: `Solis — ${captionFromPath(path)}`,
+      caption: captionFromPath(path),
+    };
+  });
 
 /**
  * Pull image N safely, wrapping around if fewer images are present than a

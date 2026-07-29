@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { gsap, useGSAP, ScrollTrigger, prefersReducedMotion } from '../lib/gsap';
 import { img } from '../data/images';
 import { CURRENCY, formatPrice } from '../data/menu';
+import Photo from './Photo';
 
 /**
  * `image` indexes into the gallery (see src/data/images.js) so every card shows
@@ -169,7 +170,13 @@ export default function Showcase() {
               <article className="pick" key={pick.name}>
                 <div className="pick__media">
                   {image && (
-                    <img className="pick__img" src={image.src} alt={pick.name} loading="lazy" />
+                    <Photo
+                      image={image}
+                      className="pick__img"
+                      sizes="(min-width: 760px) 340px, 74vw"
+                      alt={pick.name}
+                      loading="lazy"
+                    />
                   )}
                   <span className="pick__index">{String(i + 1).padStart(2, '0')}</span>
                 </div>

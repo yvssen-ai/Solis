@@ -35,27 +35,48 @@ export default function Marquee() {
         });
       });
 
-      /* Scroll velocity drives speed; scroll direction drives sign. */
+      /* Scroll velocity drives speed; scroll direction drives sign.
+         onUpdate fires on every scroll frame, so it only records a target here.
+         Building a `gsap.to()` per loop per frame — as this used to — allocates
+         two tweens a frame and, with overwrite:true, rescans the global
+         timeline each time. Easing toward the target happens once per frame in
+         the ticker below instead, with no allocation at all. */
+      let target = 1;
+
       ScrollTrigger.create({
         start: 0,
         end: 'max',
         onUpdate: (self) => {
           const boost = gsap.utils.clamp(1, 6, 1 + Math.abs(self.getVelocity()) / 900);
-          loops.forEach((loop) => {
-            gsap.to(loop, {
-              timeScale: boost * self.direction,
-              duration: 0.35,
-              overwrite: true,
-            });
-          });
+          target = boost * self.direction;
         },
       });
 
-      gsap.to('.marquee', {
-        backgroundPositionX: '100%',
-        ease: 'none',
-        scrollTrigger: { trigger: root.current, start: 'top bottom', end: 'bottom top', scrub: true },
+      const ease = () => {
+        for (const loop of loops) {
+          loop.timeScale(loop.timeScale() + (target - loop.timeScale()) * 0.12);
+        }
+      };
+
+      /* The ribbons and their ticker only run while the strip is on screen —
+         off screen they were still writing transforms every frame. */
+      const setRunning = (on) => {
+        loops.forEach((l) => (on ? l.play() : l.pause()));
+        gsap.ticker.remove(ease);
+        if (on) gsap.ticker.add(ease);
+      };
+
+      const visible = ScrollTrigger.create({
+        trigger: root.current,
+        start: 'top bottom',
+        end: 'bottom top',
+        onToggle: (self) => setRunning(self.isActive),
       });
+
+      /* onToggle only fires on a change, so seed from the current state. */
+      setRunning(visible.isActive);
+
+      return () => gsap.ticker.remove(ease);
     },
     { scope: root }
   );

@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { gsap, useGSAP, splitLines, prefersReducedMotion } from '../lib/gsap';
 import { img } from '../data/images';
+import Photo from './Photo';
 
 const HOURS = [
   { days: 'Monday — Thursday', time: '07:00 — 00:00' },
@@ -139,7 +140,9 @@ export default function Visit() {
         </div>
 
         <figure className="visit__media">
-          {media && <img src={media.src} alt={media.alt} loading="lazy" data-speed="0.9" />}
+          {media && (
+            <Photo image={media} sizes="(min-width: 900px) 45vw, 90vw" loading="lazy" data-speed="0.9" />
+          )}
         </figure>
       </div>
     </section>

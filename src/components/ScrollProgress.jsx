@@ -14,19 +14,20 @@ export default function ScrollProgress() {
     () => {
       if (prefersReducedMotion()) return;
 
-      gsap.set('.progress__arc', { strokeDasharray: CIRC, strokeDashoffset: CIRC });
+      const arc = root.current.querySelector('.progress__arc');
+      gsap.set(arc, { strokeDasharray: CIRC, strokeDashoffset: CIRC });
+
+      /* quickSetter writes the property straight to the element. The previous
+         version built a fresh tween — from a selector string, with
+         overwrite:true — on every scroll frame, which meant a DOM query plus a
+         scan of the global timeline 60 times a second. Progress maps 1:1 to
+         scroll position, so there was never anything for a tween to ease. */
+      const setArc = gsap.quickSetter(arc, 'strokeDashoffset');
 
       ScrollTrigger.create({
         start: 0,
         end: 'max',
-        onUpdate: (self) => {
-          gsap.to('.progress__arc', {
-            strokeDashoffset: CIRC * (1 - self.progress),
-            duration: 0.25,
-            ease: 'none',
-            overwrite: true,
-          });
-        },
+        onUpdate: (self) => setArc(CIRC * (1 - self.progress)),
       });
 
       /* Only appears once you have actually started reading. */

@@ -119,16 +119,46 @@ the UI.
 - **`prefers-reduced-motion` is honoured throughout.** Every component checks it
   and takes a static path: no preloader, no pinning (the showcase becomes a
   swipeable rail), no parallax.
-- **ScrollSmoother runs with `smoothTouch: 0`** — phones keep native scrolling,
-  which is faster and keeps momentum and address-bar behaviour normal. Pointer
-  devices get the inertial feel and `data-speed` parallax.
+- **ScrollSmoother is created for pointer devices only.** It moves the page by
+  transforming `#smooth-content`, and while it is registered ScrollTrigger has
+  to pin with transforms too — a transform pin is written from JS, a frame
+  behind the compositor. That is invisible when the smoother drives the scroll,
+  but on a phone scrolling natively the pinned panel chases the viewport and
+  visibly shakes. With no smoother on touch, pins go back to `position: fixed`
+  and the compositor holds them. The same applies to `will-change: transform` on
+  `#smooth-content`: it makes that element a containing block for fixed
+  descendants, so it is only applied under `.has-smoother`.
 - **Fixed UI lives outside `#smooth-content`.** A transform on an ancestor
   breaks `position: fixed`, so the nav, the scroll dial and the preloader are
   siblings of the smoothed content, not children.
+- **Nothing allocates inside a scroll `onUpdate`.** That callback runs on every
+  scroll frame. Building a `gsap.to()` there — especially from a selector string
+  with `overwrite: true`, which rescans the global timeline — was costing more
+  main-thread time than every other animation on the page combined. Targets are
+  recorded in `onUpdate` and applied with `quickSetter`, or eased once per frame
+  in a single `gsap.ticker` callback.
+- **Repeating animations pause when their section is off screen.** The hero sun,
+  the scroll cue, the footer mark and the marquee ribbons all `repeat: -1`; left
+  running they keep writing transforms and repainting SVG for the whole length
+  of the page.
 - **No percentage transforms in CSS on GSAP-animated elements.** Computed style
   reports them already resolved to pixels, so GSAP cannot tell `-101%` from
   `-670px` and a later `yPercent` tween fights the CSS. Where an element slides
   in from off-screen, the offset is owned by the timeline.
+
+## Images
+
+`src/assets/gallery/sized/` holds 480px and 960px copies of each photograph,
+used as a `srcset` by `components/Photo.jsx`; the full-size original stays as
+the `src` fallback. The originals are 1080–1440px wide and were being painted
+into cards a third that size — a phone now pulls 1.57MB instead of 2.46MB.
+
+`sizes` is not decoration: it is how the browser picks a candidate. When adding
+a `<Photo>`, give it the width the image actually occupies at that breakpoint.
+
+To regenerate after changing the photos, resize each one to `<name>-480.jpg` and
+`<name>-960.jpg` in that folder. The glob that builds the gallery is not
+recursive, so the folder never produces extra gallery entries.
 
 ## Browser support
 
