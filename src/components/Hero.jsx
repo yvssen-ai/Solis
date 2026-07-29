@@ -185,20 +185,28 @@ export default function Hero({ loaded, onNavigate }) {
             disableRemotePlayback
             aria-hidden="true"
           >
-            {/* Two codecs, in preference order, on every size — not because
-                one is "better" but because no single one is universal: real
-                Safari has no WebM support at all, real Chrome/Edge/Firefox
-                support both, and some Chromium builds (notably Linux
-                distros that strip proprietary codecs, and — found the hard
-                way — Playwright's own test browser) carry no H.264 decoder.
-                The browser picks whichever of these it can actually decode;
-                which one that is varies by browser, and that's the point of
-                listing more than one. */}
-            {heroVideo.desktop.webm && (
-              <source src={heroVideo.desktop.webm} type="video/webm" media="(min-width: 800px)" />
-            )}
+            {/* mp4 first at both sizes. H.264 is the one format every browser
+                decodes, so listing it first makes the choice deterministic —
+                which is what lets vite.config.js preload exactly the file that
+                will actually be used. (Ordering matters: with webm first, a
+                Chrome that supports both would take webm and the preload would
+                be wasted bandwidth.)
+
+                webm stays as a fallback because "every browser" has holes:
+                some Chromium builds strip proprietary codecs — Linux distro
+                packages, and Playwright's own test browser, which is how this
+                was found — and carry no H.264 decoder at all. Safari is the
+                mirror image, with no WebM support, so neither format alone is
+                safe. If both fail, the poster takes over (see the error
+                listener above).
+
+                The media queries here must stay in step with the preload
+                hints in vite.config.js. */}
             {heroVideo.desktop.mp4 && (
               <source src={heroVideo.desktop.mp4} type="video/mp4" media="(min-width: 800px)" />
+            )}
+            {heroVideo.desktop.webm && (
+              <source src={heroVideo.desktop.webm} type="video/webm" media="(min-width: 800px)" />
             )}
             {heroVideo.mobile.mp4 && <source src={heroVideo.mobile.mp4} type="video/mp4" />}
             {heroVideo.mobile.webm && <source src={heroVideo.mobile.webm} type="video/webm" />}
