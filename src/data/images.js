@@ -86,3 +86,49 @@ const logoModules = import.meta.glob('../assets/brand-logo.{svg,png,webp,jpg,jpe
 });
 
 export const brandLogo = Object.values(logoModules)[0] ?? null;
+
+/**
+ * The hero's looping video, if there is one.
+ *
+ * Drop `hero-mobile.mp4` / `.webm`, `hero-desktop.mp4` / `.webm`, and
+ * `hero-poster.jpg` into `src/assets/hero/` and the hero switches from the
+ * static photo to the loop automatically — no code change. `hero-poster.jpg`
+ * should be the video's own first frame, so there is no visible jump when
+ * playback starts; it also stands in as the static image when
+ * `prefers-reduced-motion` is on, and as the fallback if a browser can decode
+ * neither video format at all (see Hero.jsx's `onError` handler).
+ *
+ * The desktop/mobile split is a bandwidth split, not a quality one — swap in
+ * whatever crop suits your footage. Both sizes want both formats: no browser
+ * plays every codec — Safari has no WebM support at all; some Chromium builds
+ * (Linux distros that strip proprietary codecs, and Playwright's own test
+ * browser, confirmed directly) have no H.264 decoder — so a size with only
+ * one format risks going dark for whichever browser can't decode it. Missing
+ * a whole size (e.g. no mobile files) just means every visitor gets the
+ * other one, which degrades gracefully instead.
+ */
+const heroVideoModules = import.meta.glob('../assets/hero/hero-{mobile,desktop}.{mp4,webm}', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
+
+const heroVideoUrl = (basename) =>
+  Object.entries(heroVideoModules).find(([path]) => path.endsWith(`/${basename}`))?.[1] ?? null;
+
+const heroPosterModules = import.meta.glob('../assets/hero/hero-poster.{jpg,jpeg,png,webp}', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
+
+const heroVideoSet = {
+  mobile: { mp4: heroVideoUrl('hero-mobile.mp4'), webm: heroVideoUrl('hero-mobile.webm') },
+  desktop: { mp4: heroVideoUrl('hero-desktop.mp4'), webm: heroVideoUrl('hero-desktop.webm') },
+  poster: Object.values(heroPosterModules)[0] ?? null,
+};
+
+export const heroVideo =
+  heroVideoSet.mobile.mp4 || heroVideoSet.mobile.webm || heroVideoSet.desktop.mp4 || heroVideoSet.desktop.webm
+    ? heroVideoSet
+    : null;

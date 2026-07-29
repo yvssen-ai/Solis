@@ -1,6 +1,6 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { gsap, useGSAP, ScrollTrigger, prefersReducedMotion } from '../lib/gsap';
-import { img } from '../data/images';
+import { img, heroVideo } from '../data/images';
 import Photo from './Photo';
 
 /* The brand line is the headline — the wordmark is already in the nav and on
@@ -9,11 +9,47 @@ const TITLE = ['Your', 'sun', 'will', 'rise', 'from', 'here'];
 
 export default function Hero({ loaded, onNavigate }) {
   const root = useRef(null);
+  const videoRef = useRef(null);
   const hero = img(0);
+  /* Every mainstream browser can decode at least one of mp4/webm, but a
+     browser with neither (verified directly: a proprietary-codec-free
+     Chromium build renders a broken-video glyph over a near-black frame, not
+     the poster) needs a real way out. `error` only fires once every listed
+     <source> has been tried and failed, so this can only trip after a genuine
+     total failure — never a slow network or a mid-swap flicker. */
+  const [videoFailed, setVideoFailed] = useState(false);
+  /* A reduced-motion visitor never gets the <video> at all (see below), so the
+     video's own opening frame doubles as their static hero image — that reads
+     as "the same hero, paused" rather than swapping in unrelated photography. */
+  const heroPoster = heroVideo?.poster ? { src: heroVideo.poster, alt: hero?.alt ?? 'Solis' } : hero;
+  const showVideo = heroVideo && !prefersReducedMotion() && !videoFailed;
 
   useGSAP(
     () => {
       const reduced = prefersReducedMotion();
+
+      /* Belt-and-braces autoplay: muted/loop/playsInline/autoPlay on the
+         element covers every mainstream browser, but some in-app webviews
+         (Instagram, TikTok) still block the attribute-only version. */
+      let onVideoError;
+      if (!reduced && videoRef.current) {
+        const video = videoRef.current;
+        video.muted = true;
+        video.play?.().catch(() => {});
+
+        /* Attached natively, not via React's onError prop. Confirmed directly
+           (React version: fails: identical markup in plain HTML: works) that
+           React's synthetic handler for this element fires on an
+           intermediate <source> candidate failing, not only once every
+           candidate has been tried — the exact case a multi-codec fallback
+           exists to survive. The native `error` event on the element itself
+           does not have that problem; it only ever fires after the whole
+           source list is exhausted, which is what "no browser here can play
+           any of this" actually looks like. */
+        onVideoError = () => setVideoFailed(true);
+        video.addEventListener('error', onVideoError);
+      }
+      const videoEl = videoRef.current;
 
       /* ---- Entrance, fired the moment the preloader hands over ---- */
       if (loaded && !reduced) {
@@ -109,14 +145,25 @@ export default function Hero({ loaded, onNavigate }) {
 
       /* Those three loops repeat forever. Left running they keep writing
          transforms — and repainting a 24-line SVG — for the whole length of the
-         page, long after the hero has scrolled away. */
+         page, long after the hero has scrolled away. The video gets the same
+         treatment: decoding it costs real main-thread time even while paused
+         off-screen is cheap, and there is a full-page scroll's worth of other
+         sections it has no reason to keep running behind. */
       const heroVisible = ScrollTrigger.create({
         trigger: root.current,
         start: 'top bottom',
         end: 'bottom top',
-        onToggle: (self) => idle.forEach((t) => (self.isActive ? t.play() : t.pause())),
+        onToggle: (self) => {
+          idle.forEach((t) => (self.isActive ? t.play() : t.pause()));
+          if (self.isActive) videoRef.current?.play().catch(() => {});
+          else videoRef.current?.pause();
+        },
       });
       idle.forEach((t) => (heroVisible.isActive ? t.play() : t.pause()));
+
+      return () => {
+        if (videoEl && onVideoError) videoEl.removeEventListener('error', onVideoError);
+      };
     },
     { scope: root, dependencies: [loaded] }
   );
@@ -124,7 +171,41 @@ export default function Hero({ loaded, onNavigate }) {
   return (
     <section className="hero" id="top" ref={root}>
       <div className="hero__media">
-        {hero && <Photo image={hero} className="hero__img" sizes="100vw" fetchpriority="high" />}
+        {showVideo ? (
+          <video
+            ref={videoRef}
+            className="hero__img"
+            poster={heroVideo.poster ?? undefined}
+            muted
+            loop
+            autoPlay
+            playsInline
+            preload="auto"
+            disablePictureInPicture
+            disableRemotePlayback
+            aria-hidden="true"
+          >
+            {/* Two codecs, in preference order, on every size — not because
+                one is "better" but because no single one is universal: real
+                Safari has no WebM support at all, real Chrome/Edge/Firefox
+                support both, and some Chromium builds (notably Linux
+                distros that strip proprietary codecs, and — found the hard
+                way — Playwright's own test browser) carry no H.264 decoder.
+                The browser picks whichever of these it can actually decode;
+                which one that is varies by browser, and that's the point of
+                listing more than one. */}
+            {heroVideo.desktop.webm && (
+              <source src={heroVideo.desktop.webm} type="video/webm" media="(min-width: 800px)" />
+            )}
+            {heroVideo.desktop.mp4 && (
+              <source src={heroVideo.desktop.mp4} type="video/mp4" media="(min-width: 800px)" />
+            )}
+            {heroVideo.mobile.mp4 && <source src={heroVideo.mobile.mp4} type="video/mp4" />}
+            {heroVideo.mobile.webm && <source src={heroVideo.mobile.webm} type="video/webm" />}
+          </video>
+        ) : (
+          heroPoster && <Photo image={heroPoster} className="hero__img" sizes="100vw" fetchpriority="high" />
+        )}
         <div className="hero__scrim" />
         <div className="hero__grain" />
       </div>
