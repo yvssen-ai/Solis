@@ -68,6 +68,10 @@ export default function Showcase() {
 
       const el = track.current;
       const distance = () => Math.max(0, el.scrollWidth - root.current.offsetWidth);
+      /* Measured off the section itself, which is sized in `svh` and therefore
+         does not change when a phone's address bar collapses. `window.innerHeight`
+         does change, and using it here made the pin's length move mid-scroll. */
+      const tail = () => root.current.offsetHeight * 0.5;
 
       /* Vertical scroll drives horizontal travel. ease MUST be "none" so the
          two stay locked 1:1 — see containerAnimation below. */
@@ -77,11 +81,15 @@ export default function Showcase() {
         scrollTrigger: {
           trigger: root.current,
           pin: true,
-          scrub: isTouch ? 0.35 : 1,
+          /* Direct scrub on touch. A numeric scrub keeps easing toward the
+             scroll position after your finger stops, and against native
+             momentum that reads as the rail wobbling. */
+          scrub: isTouch ? true : 1,
           start: 'top top',
-          end: () => `+=${distance() + window.innerHeight * 0.5}`,
+          end: () => `+=${distance() + tail()}`,
           invalidateOnRefresh: true,
-          anticipatePin: 1,
+          /* No anticipatePin: it pre-pins a few pixels early, which with scrub
+             shows up as a nudge at the moment the section sticks. */
         },
       });
 
@@ -134,7 +142,7 @@ export default function Showcase() {
           scrollTrigger: {
             trigger: root.current,
             start: 'top top',
-            end: () => `+=${distance() + window.innerHeight * 0.5}`,
+            end: () => `+=${distance() + tail()}`,
             scrub: true,
             invalidateOnRefresh: true,
           },

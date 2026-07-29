@@ -6,6 +6,13 @@
 
 #smooth-content {
   width: 100%;
+}
+
+/* Only promote the content when the smoother is actually driving it. Left on
+   unconditionally, `will-change: transform` makes this element a containing
+   block for fixed-position descendants, which silently downgrades every pinned
+   section to transform pinning — the source of the shake on touch devices. */
+.has-smoother #smooth-content {
   will-change: transform;
 }
 

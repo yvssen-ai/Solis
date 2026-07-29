@@ -21,19 +21,30 @@ export default function App() {
     () => {
       document.documentElement.classList.add('js-ready');
 
-      /* ScrollSmoother handles the inertial feel on pointer devices and gives
-         us `data-speed` parallax everywhere. smoothTouch: 0 deliberately hands
-         phones back to native scrolling — it is faster, and it keeps momentum
-         and address-bar collapse behaving the way people expect. */
-      if (!prefersReducedMotion()) {
+      /* A phone hiding or showing its address bar fires a resize, and a resize
+         re-measures every trigger. Mid-scroll that lands as a jump. This tells
+         ScrollTrigger to ignore those specific vertical resizes. */
+      ScrollTrigger.config({ ignoreMobileResize: true });
+
+      const isTouch = window.matchMedia('(hover: none)').matches;
+
+      /* ScrollSmoother is for pointer devices only.
+         It moves the page by transforming #smooth-content, so while it is
+         registered ScrollTrigger has to pin with transforms too — it cannot use
+         `position: fixed` inside a transformed ancestor. Transform pinning is
+         updated from JS, one frame behind the compositor, which is invisible
+         when the smoother is driving the scroll but reads as a shake on a phone
+         scrolling natively. Leaving it uncreated on touch lets pins go back to
+         `position: fixed`, which the compositor handles on its own. */
+      if (!prefersReducedMotion() && !isTouch) {
         ScrollSmoother.create({
           wrapper: '#smooth-wrapper',
           content: '#smooth-content',
           smooth: 1.15,
-          smoothTouch: 0,
           effects: true,
           normalizeScroll: false,
         });
+        document.documentElement.classList.add('has-smoother');
       }
 
       /* Images and webfonts change layout height; recalculate every trigger
