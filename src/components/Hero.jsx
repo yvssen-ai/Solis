@@ -7,9 +7,23 @@ import Photo from './Photo';
    the storefront behind it, so repeating it a third time only competes. */
 const TITLE = ['Your', 'sun', 'will', 'rise', 'from', 'here'];
 
+/**
+ * In a production build the hero <video> is emitted into index.html so the
+ * browser's preload scanner finds it immediately (see vite.config.js). When
+ * that element is present this component adopts it rather than rendering a
+ * second one, so the fetch that began at ~0.1s is the one that plays. In dev
+ * the plugin does not run and this is null, so the JSX <video> below is used.
+ */
+const preMountedVideo = () =>
+  typeof document === 'undefined' ? null : document.getElementById('hero-video');
+
 export default function Hero({ loaded, onNavigate }) {
   const root = useRef(null);
   const videoRef = useRef(null);
+  const mediaRef = useRef(null);
+  /* Read once at first render: after adoption the element is still findable by
+     id, so re-checking later would not tell us whether React owns it. */
+  const [usesPreMounted] = useState(() => !!preMountedVideo());
   const hero = img(0);
   /* Every mainstream browser can decode at least one of mp4/webm, but a
      browser with neither (verified directly: a proprietary-codec-free
@@ -27,6 +41,21 @@ export default function Hero({ loaded, onNavigate }) {
   useGSAP(
     () => {
       const reduced = prefersReducedMotion();
+
+      /* Take ownership of the element index.html shipped, moving it into the
+         hero ahead of the scrim. Moving a media element does not restart it,
+         so whatever it has already buffered since ~0.1s is kept. On reduced
+         motion it is dropped instead, which also cancels its download. */
+      const pre = preMountedVideo();
+      if (pre) {
+        if (reduced) {
+          pre.remove();
+        } else if (mediaRef.current && pre.parentElement !== mediaRef.current) {
+          pre.removeAttribute('style');
+          mediaRef.current.insertBefore(pre, mediaRef.current.firstChild);
+          videoRef.current = pre;
+        }
+      }
 
       /* Belt-and-braces autoplay: muted/loop/playsInline/autoPlay on the
          element covers every mainstream browser, but some in-app webviews
@@ -46,7 +75,13 @@ export default function Hero({ loaded, onNavigate }) {
            does not have that problem; it only ever fires after the whole
            source list is exhausted, which is what "no browser here can play
            any of this" actually looks like. */
-        onVideoError = () => setVideoFailed(true);
+        onVideoError = () => {
+          /* React did not create this node when it came from index.html, so it
+             will not remove it either — do that here, or a dead <video> stays
+             stacked over the poster we are falling back to. */
+          if (usesPreMounted) video.remove();
+          setVideoFailed(true);
+        };
         video.addEventListener('error', onVideoError);
       }
       const videoEl = videoRef.current;
@@ -170,8 +205,11 @@ export default function Hero({ loaded, onNavigate }) {
 
   return (
     <section className="hero" id="top" ref={root}>
-      <div className="hero__media">
-        {showVideo ? (
+      <div className="hero__media" ref={mediaRef}>
+        {/* When index.html already shipped the video, render nothing here —
+            the effect moves that element in as this container's first child.
+            Rendering a second <video> would download the whole thing twice. */}
+        {showVideo && !usesPreMounted ? (
           <video
             ref={videoRef}
             className="hero__img"
@@ -211,8 +249,12 @@ export default function Hero({ loaded, onNavigate }) {
             {heroVideo.mobile.mp4 && <source src={heroVideo.mobile.mp4} type="video/mp4" />}
             {heroVideo.mobile.webm && <source src={heroVideo.mobile.webm} type="video/webm" />}
           </video>
-        ) : (
-          heroPoster && <Photo image={heroPoster} className="hero__img" sizes="100vw" fetchpriority="high" />
+        ) : null}
+        {/* Poster only when there is no video at all — reduced motion, or every
+            source failed. With the adopted element in place it would otherwise
+            sit underneath it, downloading for nothing. */}
+        {!showVideo && heroPoster && (
+          <Photo image={heroPoster} className="hero__img" sizes="100vw" fetchpriority="high" />
         )}
         <div className="hero__scrim" />
         <div className="hero__grain" />
