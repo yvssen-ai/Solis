@@ -142,17 +142,40 @@ export const friendlyError = (error, fallback = 'Something went wrong. Please tr
   if (!error) return fallback;
 
   const message = String(error.message ?? error);
+  const status = error.status ?? 0;
+
+  /* The real error always goes to the console. Everything below is a
+     deliberately vague sentence for a customer, which makes this the only place
+     the actual cause can be seen when something is wrong with the deployment. */
+  if (typeof console !== 'undefined') console.error('[solis]', status || '', message, error.details ?? '');
 
   if (/Failed to fetch|NetworkError|network request failed|load failed/i.test(message)) {
     return 'Could not reach the kitchen. Check your connection and try again.';
   }
-  if (/permission denied|JWT|not authorized|401|403/i.test(message)) {
-    return 'Please sign in again to continue.';
+
+  /* Not a customer problem and never a "sign in again" problem — nobody signs
+     in. A 401/403 here means the database has not granted `anon` execute on the
+     ordering functions, and a 404 means those functions do not exist yet: both
+     are the guest-orders migration not having been applied. Telling a customer
+     to sign in, which this used to do, was a leftover from when the site had
+     accounts and sent people looking for a button that is not there. */
+  if (
+    status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    /permission denied|not authorized|does not exist|could not find the function|schema cache/i.test(
+      message
+    )
+  ) {
+    return 'Online ordering is not switched on yet. Please call the shop to order.';
   }
-  if (/rate limit|too many requests|429/i.test(message)) {
+
+  if (status === 429 || /rate limit|too many requests/i.test(message)) {
     return 'Too many attempts. Give it a minute and try again.';
   }
-  /* Messages raised deliberately by place_order() read as plain sentences. */
+
+  /* Messages raised deliberately by place_order() read as plain sentences, and
+     are written to be shown as-is. */
   if (
     /^[A-Z][^_]*$/.test(message) &&
     message.length < 120 &&
@@ -160,5 +183,6 @@ export const friendlyError = (error, fallback = 'Something went wrong. Please tr
   ) {
     return message;
   }
+
   return fallback;
 };

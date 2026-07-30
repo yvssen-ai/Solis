@@ -245,3 +245,9 @@ grant execute on function public.get_orders(uuid[]) to anon, authenticated;
 -- orders or order_items at all, and the RLS policies still resolve to "your own
 -- rows, or every row if you are staff". Guests never touch the tables — both
 -- functions above are SECURITY DEFINER and are the entire public surface.
+
+-- PostgREST serves from a cached copy of the schema. Supabase reloads it on DDL
+-- automatically, but not reliably the instant a statement finishes — and a stale
+-- cache is indistinguishable from a missing function: the API answers 404 for a
+-- function that plainly exists. Asking explicitly costs nothing.
+notify pgrst, 'reload schema';
