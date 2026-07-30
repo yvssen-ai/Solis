@@ -477,3 +477,76 @@ No auth configuration is needed: nobody signs in. See
 Vercel auto-detects Vite: build `npm run build`, output `dist`. Nothing else to
 configure. Note that Vercel builds the **production branch** — if the site 404s
 with `NOT_FOUND`, the branch it is building does not contain this code.
+
+---
+
+## Card payments (Paymob)
+
+Cards are optional. Leave the secrets unset and checkout still works — the card
+option simply returns "Card payments are not switched on yet", and cash on
+pickup is unaffected.
+
+### The flow
+
+```
+place_order            → order exists, unpaid, total computed from menu_items
+create-payment         → reads that total FROM THE DATABASE, asks Paymob for a
+                         checkout page, returns its URL
+customer               → enters the card on Paymob's page, never on this site
+paymob-webhook         → Paymob calls us, signed; only this marks the order paid
+```
+
+Three things this arrangement buys, and each is the reason for a design choice
+that would otherwise look fussy:
+
+- **The browser never sends an amount.** `create-payment` takes an order id and
+  its receipt token, nothing else. There is no number in the request for anyone
+  to edit, which is the same guarantee `place_order` already gives on prices.
+- **The redirect back proves nothing.** Anyone can type the return URL, so the
+  return is only ever a cue to re-read the order. The webhook is the record.
+- **Replays are harmless.** Gateways retry. The unique index on
+  `(payment_provider, payment_ref)` plus the `payment_status <> 'paid'` guard
+  inside `mark_order_paid` make a second delivery a no-op.
+
+### Setting it up
+
+1. Sign up at [paymob.com](https://paymob.com) and stay in **test mode** — no
+   business registration is needed to test, and test cards are in their docs.
+2. From the dashboard take: the **secret key**, the **public key**, the **card
+   integration id**, and the **HMAC secret**.
+3. Give them to Supabase — never to Vite, which compiles its variables into the
+   browser bundle:
+
+   ```bash
+   supabase secrets set \
+     PAYMOB_SECRET_KEY=sk_test_… \
+     PAYMOB_PUBLIC_KEY=egy_pk_test_… \
+     PAYMOB_INTEGRATION_ID=1234567 \
+     PAYMOB_HMAC_SECRET=… \
+     SITE_URL=https://solis-azure.vercel.app
+   ```
+
+4. Deploy both functions. The webhook takes `--no-verify-jwt` because Paymob
+   calls it, not a signed-in user; it authenticates itself with the HMAC instead.
+
+   ```bash
+   supabase functions deploy create-payment
+   supabase functions deploy paymob-webhook --no-verify-jwt
+   ```
+
+5. In Paymob, set the **Transaction Processed Callback** to
+   `https://<project>.supabase.co/functions/v1/paymob-webhook`.
+6. Apply the migration: `supabase db push`.
+
+### Going live
+
+Swap the test keys for live ones. That is the only code-facing change — but the
+account behind them needs a commercial register, a tax card and a company bank
+account, which is the café's paperwork, not the site's.
+
+### What is deliberately not here
+
+No card form. A PAN never touches this site's DOM or its database, which keeps
+the whole thing in PCI SAQ-A instead of SAQ-D. Building a prettier in-page card
+field is the single most expensive UI decision available here, and it buys
+nothing a customer notices.
