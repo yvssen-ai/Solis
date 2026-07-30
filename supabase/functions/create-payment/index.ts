@@ -28,11 +28,20 @@ const {
 
 const MODE = KASHIER_MODE === 'live' ? 'live' : 'test';
 const CHECKOUT = 'https://checkout.kashier.io/';
+/* A trailing slash in the secret would otherwise produce site.com//?order=… */
+const RETURN_TO = (SITE_URL || '').replace(/\/+$/, '');
 
+/* The client sends apikey and authorization alongside content-type, so all three
+   have to be named here: a preflight that does not list every header the request
+   carries is refused by the browser before the call is ever made, and what
+   surfaces is an opaque network failure rather than anything mentioning CORS.
+   `*` for the origin is safe — this endpoint carries no cookies, and its real
+   authorisation is the receipt token in the body, which only the buyer holds. */
 const cors = {
-  'access-control-allow-origin': SITE_URL || '*',
-  'access-control-allow-headers': 'content-type',
+  'access-control-allow-origin': '*',
+  'access-control-allow-headers': 'authorization, apikey, content-type, x-client-info',
   'access-control-allow-methods': 'POST, OPTIONS',
+  'access-control-max-age': '86400',
 };
 
 const json = (body: unknown, status = 200) =>
@@ -123,7 +132,7 @@ Deno.serve(async (request) => {
       display: 'en',
       /* Where the customer lands afterwards. This is a cue to re-read the order,
          never proof of payment — see the webhook. */
-      merchantRedirect: `${SITE_URL}/?order=${orderId}`,
+      merchantRedirect: `${RETURN_TO}/?order=${orderId}`,
       serverWebhook: `${SUPABASE_URL}/functions/v1/kashier-webhook`,
     });
 
