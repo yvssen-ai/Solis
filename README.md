@@ -104,11 +104,7 @@ src/
     menu.css               menu rail + price list
     shop.css               add buttons, cart pill, drawer, checkout
 supabase/
-  migrations/              schema, RLS, the place_order function, menu seed
-  functions/
-    notify-order/          emails each new order to the counter
-      index.ts             the handler: verify, read the order, send
-      email.ts             subject/text/html formatting, testable on its own
+  migrations/              schema, RLS, place_order, menu seed, order emails
 ```
 
 ## Editing the menu
@@ -302,67 +298,61 @@ A complete ordering system for about 7 kB over the brochure it started as.
 
 ### Order notifications by email
 
-Every order emails the counter. A trigger on `public.orders` posts the new order's
-id to the `notify-order` edge function, which reads the order back and sends it
-through [Resend](https://resend.com).
+Every order emails the counter — order number, customer name, phone, items and
+total — through [Resend](https://resend.com). It is sent from inside the
+database: a constraint trigger on `public.orders` builds the message and posts it
+with `pg_net`.
 
-Only the id crosses the wire, deliberately: `place_order()` inserts the order row
-first and its line items immediately after, so anything assembled inside the
-trigger would describe an order with nothing in it. pg_net queues the request
-inside the transaction and sends it after commit, by which point the whole order
-is durable and readable.
+**Setup is one SQL statement and one secret**, with no toolchain:
 
-It sends from the server because it has to. Mail needs a provider API key, and
-Vite inlines every `VITE_` variable into the bundle — there is no version of this
-that is safe in the browser.
-
-**Setup — four secrets and two commands.** Get a free Resend API key (100
-emails/day, no domain needed to start), then:
-
-```bash
-supabase link --project-ref <project-ref>
-
-supabase secrets set \
-  RESEND_API_KEY=re_xxxxxxxx \
-  ORDER_NOTIFY_TO=you@gmail.com \
-  ORDER_WEBHOOK_SECRET="$(openssl rand -hex 32)"
-
-# --no-verify-jwt because the caller is Postgres, which has no user session.
-# The shared secret below is what actually authenticates the request.
-supabase functions deploy notify-order --no-verify-jwt
-```
-
-Then tell the database where to post, in the SQL editor — using the *same* random
-string you set as `ORDER_WEBHOOK_SECRET`:
+1. Sign up at [resend.com](https://resend.com) and copy the API key (`re_...`).
+   The free tier is 100 emails a day.
+2. Run `supabase/migrations/20260730080000_email_orders_from_postgres.sql` in the
+   SQL editor.
+3. In the same editor, once:
 
 ```sql
-select vault.create_secret(
-  'https://<project-ref>.supabase.co/functions/v1/notify-order', 'order_webhook_url');
-select vault.create_secret('<the same random string>', 'order_webhook_secret');
+select vault.create_secret('re_your_key_here', 'resend_api_key');
+select vault.create_secret('you@gmail.com',    'order_notify_to');
 ```
 
-Until both vault secrets exist the trigger is a no-op — orders are still taken,
-they just are not emailed. That is the deliberate failure mode: a mail outage
-must never be a reason to refuse a customer's order, so the trigger swallows its
-own errors and logs a warning.
+Resend's shared `onboarding@resend.dev` sender needs no domain, and delivers only
+to the address that owns the Resend account — which is exactly this use case.
+Once a domain is verified, add `order_notify_from` as a third secret.
 
-To see what was delivered:
+**This used to be an edge function** (`supabase/functions/notify-order`,
+TypeScript, deployed with the CLI). It worked and was tested, but standing up the
+CLI — install, log in, link, set secrets, deploy — is a lot of moving parts
+between a cafe and its order notifications. The SQL version needs none of it. The
+cost is that the email is assembled with `format()` instead of a template, which
+is why `html_escape()` exists here and did not there.
+
+**The trigger is `DEFERRABLE INITIALLY DEFERRED`, and that is load-bearing.**
+`place_order()` inserts the order row and then its line items. A plain `AFTER
+INSERT` trigger fires between those two statements, so the email it built would
+list no items at all. Deferring to commit means every item is readable. There is
+a test for exactly this: it asserts nothing is queued mid-transaction and that
+both line items appear in what is finally sent.
+
+Two deliberate failure modes:
+
+- **Not configured yet is silent.** With no secrets in the vault the trigger
+  returns without sending. A missing notification must never be a reason to
+  refuse a customer's order.
+- **A send failure is swallowed and logged.** Same reasoning; the order is
+  already committed and safe.
+
+To see what went out, and what Resend said back:
 
 ```sql
-select status_code, content, created from net._http_response order by created desc limit 10;
+select created, status_code, content from net._http_response order by created desc limit 10;
 ```
 
-`ORDER_NOTIFY_TO` accepts a comma-separated list if more than one person should
-get them. Once you have a domain verified with Resend, set `ORDER_NOTIFY_FROM` to
-an address on it — the shared `onboarding@resend.dev` sender works immediately but
-is far more likely to land in spam.
+To preview an email without sending one:
 
-The email body is formatted in `supabase/functions/notify-order/email.ts`, kept
-free of Deno and network APIs so it can be tested on its own. It is table-based
-with inline styles because Gmail strips `<style>` blocks and ignores flexbox and
-grid outright — anything cleverer arrives as a stack of unstyled text on exactly
-the client this is aimed at. Customer names and notes are HTML-escaped: they are
-free text typed by a stranger and they land in your inbox.
+```sql
+select public.order_email(id) ->> 'html' from public.orders order by created_at desc limit 1;
+```
 
 ### Payments
 
@@ -465,7 +455,8 @@ Also outstanding before taking real orders:
 1. Run `supabase/migrations/20260730070000_guest_orders.sql` against the project.
    Until it is applied, `place_order` still demands a signed-in user and every
    checkout fails — this is the one that blocks everything else.
-2. Deploy `notify-order` and set its secrets, or orders arrive silently — see
+2. Run `supabase/migrations/20260730080000_email_orders_from_postgres.sql` and
+   add the two vault secrets, or orders arrive silently — see
    [Order notifications by email](#order-notifications-by-email). Without it the
    only place an order appears is the dashboard.
 
