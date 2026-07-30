@@ -303,22 +303,31 @@ total — through [Resend](https://resend.com). It is sent from inside the
 database: a constraint trigger on `public.orders` builds the message and posts it
 with `pg_net`.
 
-**Setup is one SQL statement and one secret**, with no toolchain:
+**Setup is SQL plus one secret**, with no toolchain:
 
-1. Sign up at [resend.com](https://resend.com) and copy the API key (`re_...`).
-   The free tier is 100 emails a day.
-2. Run `supabase/migrations/20260730080000_email_orders_from_postgres.sql` in the
-   SQL editor.
+1. Sign up at [brevo.com](https://www.brevo.com) with the address that should
+   receive the orders, and confirm the email they send. Free tier is 300 a day.
+   Copy an API key from **SMTP & API → API Keys** (`xkeysib-...`).
+2. Run the `..._email_orders_from_postgres.sql` and
+   `..._send_order_email_via_brevo.sql` migrations in the SQL editor.
 3. In the same editor, once:
 
 ```sql
-select vault.create_secret('re_your_key_here', 'resend_api_key');
+select vault.create_secret('xkeysib-your-key', 'brevo_api_key');
 select vault.create_secret('you@gmail.com',    'order_notify_to');
 ```
 
-Resend's shared `onboarding@resend.dev` sender needs no domain, and delivers only
-to the address that owns the Resend account — which is exactly this use case.
-Once a domain is verified, add `order_notify_from` as a third secret.
+**Why Brevo and not Resend.** Resend was the first choice and the code still
+supports it — set `resend_api_key` instead and it is used. But Resend will not
+send from its shared `onboarding@resend.dev` address without a verified domain
+("Domain is not verified"), and a shop on a `vercel.app` subdomain has no domain
+to verify. Brevo verifies a single *sender address* instead: sign up, click the
+link in the email, done. Whichever key is in the vault decides the provider, and
+Brevo wins if both are set, so switching needs no deletion.
+
+By default the email is sent from the same address it is sent to — the one the
+provider verified. That looks odd and is exactly right: it is a note from the
+shop to itself. Set `order_notify_from` once a real domain exists.
 
 **This used to be an edge function** (`supabase/functions/notify-order`,
 TypeScript, deployed with the CLI). It worked and was tested, but standing up the
