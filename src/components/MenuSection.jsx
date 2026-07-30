@@ -1,6 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { gsap, useGSAP, ScrollTrigger, splitLines, prefersReducedMotion } from '../lib/gsap';
-import { menu, CURRENCY, formatPrice, totalItems } from '../data/menu';
+import { CURRENCY, formatPrice } from '../data/menu';
+import { useMenu } from '../hooks/useMenu';
+import { useCart } from '../context/CartContext';
 
 export default function MenuSection() {
   const root = useRef(null);
@@ -8,8 +10,35 @@ export default function MenuSection() {
   const indicatorRef = useRef(null);
   const listRef = useRef(null);
   const [active, setActive] = useState(0);
+  /* Which row was tapped last, so the button can flash a confirmation. */
+  const [justAdded, setJustAdded] = useState(null);
 
-  const section = menu[active];
+  const { sections: menu, totalItems, isLive } = useMenu();
+  const { add, reconcile } = useCart();
+
+  /* The live menu can have fewer categories than the snapshot — a category with
+     nothing available in it is dropped — so an index that was valid a moment ago
+     may not be after the swap. */
+  const section = menu[Math.min(active, menu.length - 1)];
+
+  /* Prune anything sold out of a cart that has been sitting in localStorage. */
+  useEffect(() => {
+    if (!isLive) return;
+    const available = new Map();
+    for (const category of menu) {
+      for (const item of category.items) available.set(item.id, item);
+    }
+    reconcile(available);
+  }, [isLive, menu, reconcile]);
+
+  const handleAdd = (item) => {
+    if (!add(item)) return;
+    setJustAdded(item.id);
+    /* gsap's delayedCall rather than setTimeout: it is tied to the same ticker
+       as everything else here, so it pauses with the page instead of firing
+       into a backgrounded tab. */
+    gsap.delayedCall(0.9, () => setJustAdded((current) => (current === item.id ? null : current)));
+  };
 
   /* ---- One-time setup: heading reveal, sticky rail behaviour ---- */
   useGSAP(
@@ -111,7 +140,10 @@ export default function MenuSection() {
 
       ScrollTrigger.refresh();
     },
-    { scope: root, dependencies: [active], revertOnUpdate: true }
+    /* `section` rather than `active`: the same index can point at a different
+       category once the live menu replaces the snapshot, and the row animation
+       has to re-run for the list that actually got rendered. */
+    { scope: root, dependencies: [active, section], revertOnUpdate: true }
   );
 
   return (
@@ -165,7 +197,7 @@ export default function MenuSection() {
 
           <ul className="menu__list">
             {section.items.map((item) => (
-              <li className="menu__row" key={item.name}>
+              <li className="menu__row" key={item.id ?? item.name}>
                 <span className="menu__name">
                   {item.name}
                   {item.meta && <span className="menu__meta">{item.meta}</span>}
@@ -176,6 +208,16 @@ export default function MenuSection() {
                   <span className="menu__currency">{CURRENCY}</span>
                   {formatPrice(item.price)}
                 </span>
+                {item.orderable && (
+                  <button
+                    type="button"
+                    className={`menu__add ${justAdded === item.id ? 'is-added' : ''}`}
+                    onClick={() => handleAdd(item)}
+                    aria-label={`Add ${item.name} to your order`}
+                  >
+                    {justAdded === item.id ? '✓' : '+'}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -186,6 +228,13 @@ export default function MenuSection() {
         All prices are in L.E. Menu subject to seasonal change — ask the bar what landed
         this week.
       </p>
+
+      {!isLive && (
+        <p className="shell menu__offline">
+          Showing our saved menu — online ordering is briefly unavailable. Everything below
+          is still on sale; give us a call and we will take it over the phone.
+        </p>
+      )}
     </section>
   );
 }

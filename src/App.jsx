@@ -12,6 +12,10 @@ import Gallery from './components/Gallery';
 import Visit from './components/Visit';
 import Footer from './components/Footer';
 import ScrollProgress from './components/ScrollProgress';
+import Shop from './components/Shop';
+
+import { AuthProvider } from './context/AuthContext';
+import { CartProvider } from './context/CartContext';
 
 export default function App() {
   const root = useRef(null);
@@ -74,25 +78,35 @@ export default function App() {
   };
 
   return (
-    <div ref={root}>
-      <Preloader onDone={handleLoaderDone} />
-      <Nav onNavigate={scrollTo} />
-      <ScrollProgress />
+    <AuthProvider>
+      <CartProvider>
+        <div ref={root}>
+          <Preloader onDone={handleLoaderDone} />
+          <Nav onNavigate={scrollTo} />
+          <ScrollProgress />
 
-      <div id="smooth-wrapper">
-        <div id="smooth-content">
-          <main>
-            <Hero loaded={loaded} onNavigate={scrollTo} />
-            <Marquee />
-            <Story />
-            <Showcase />
-            <MenuSection />
-            <Gallery />
-            <Visit />
-          </main>
-          <Footer onNavigate={scrollTo} />
+          <div id="smooth-wrapper">
+            <div id="smooth-content">
+              <main>
+                <Hero loaded={loaded} onNavigate={scrollTo} />
+                <Marquee />
+                <Story />
+                <Showcase />
+                <MenuSection />
+                <Gallery />
+                <Visit />
+              </main>
+              <Footer onNavigate={scrollTo} />
+            </div>
+          </div>
+
+          {/* Outside #smooth-content on purpose. ScrollSmoother transforms that
+              element, and a transformed ancestor makes `position: fixed` resolve
+              against it rather than the viewport — a fixed drawer inside it
+              would scroll away with the page. */}
+          <Shop />
         </div>
-      </div>
-    </div>
+      </CartProvider>
+    </AuthProvider>
   );
 }

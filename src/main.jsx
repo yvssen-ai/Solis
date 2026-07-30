@@ -6,6 +6,7 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './styles/sections.css';
 import './styles/menu.css';
+import './styles/shop.css';
 
 /* Lock scrolling for the preloader here, not in an effect: child effects run
    before parent ones, so a reduced-motion preloader would otherwise finish and

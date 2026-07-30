@@ -69,10 +69,17 @@ index.html
 src/
   main.jsx                 entry, stylesheet order
   App.jsx                  ScrollSmoother setup, section order, scroll-to
-  lib/gsap.js              single place every GSAP plugin is registered
+  lib/
+    gsap.js                single place every GSAP plugin is registered
+    supabase.js            config, on-demand client loader, money + error helpers
   data/
-    menu.js                ← the entire menu lives here
+    menu.js                ← bundled menu snapshot (the offline fallback)
     images.js              gallery glob + logo slot
+  hooks/
+    useMenu.js             live menu from Supabase, falling back to the snapshot
+  context/
+    AuthContext.jsx        session, staff flag, owns the Supabase client lifetime
+    CartContext.jsx        cart lines, localStorage, place_order payload
   components/
     Preloader.jsx          sunrise reveal: rays draw, counter, slat wipe
     Nav.jsx                hide-on-scroll bar + full-screen overlay menu
@@ -85,18 +92,36 @@ src/
     Gallery.jsx            ScrollTrigger.batch reveals + FLIP-style lightbox
     Visit.jsx              hours, contact, setting sun
     Footer.jsx             oversized wordmark that rises on scroll
+    Shop.jsx               mounts the cart button; lazy-loads the drawer
+    CartFab.jsx            floating cart pill, count + running total
+    CartDrawer.jsx         cart → checkout → confirmation, and order history
+    AuthPanel.jsx          passwordless email sign-in
+    OrderHistory.jsx       past orders with live status
   styles/
     tokens.css             ← the palette
     base.css               reset, type, buttons, reduced-motion
     sections.css           every section except the menu
     menu.css               menu rail + price list
+    shop.css               add buttons, cart pill, drawer, checkout
+supabase/
+  migrations/              schema, RLS, the place_order function, menu seed
 ```
 
 ## Editing the menu
 
-`src/data/menu.js` is the single source of truth: section names, taglines,
-items and prices. The item count, section count and the "83 items across 9
-sections" line on the page are all computed from it.
+The menu lives in the database — `menu_categories` and `menu_items` — and is
+edited in the Supabase dashboard (Table Editor). Prices there are integer
+**piastres**: 110 EGP is `11000`. Changes are live on the next page load; no
+deploy needed.
+
+`src/data/menu.js` is a **snapshot** of it, bundled into the build. It is what
+the site renders in the first moments before the API responds, and what it falls
+back to if the API cannot be reached at all — in which case the ordering buttons
+disappear and a short notice explains why. Keeping the two in step is worth
+doing when prices change, but nothing breaks if they drift: the snapshot is
+display-only, and every price on an actual order is read from the database.
+
+Its shape, which is also the shape `useMenu` returns:
 
 ```js
 {
@@ -113,6 +138,139 @@ Optional per-item fields: `meta` (e.g. `'250g'`) and `signature: true` (adds a
 
 Prices are plain numbers; the `E£` prefix and thousands separators are added by
 the UI.
+
+---
+
+## Backend (Supabase)
+
+The site reads its menu from Supabase and takes orders through it. Everything is
+in `supabase/migrations/`, applied in filename order.
+
+### Tables
+
+| Table | What it is | Who can read it |
+| --- | --- | --- |
+| `menu_categories`, `menu_items` | The menu | Anyone — but only rows that are `is_active` / `is_available` |
+| `profiles` | Name and phone, keyed to the auth user | Only its owner |
+| `staff` | Membership = being staff | Only your own row |
+| `orders`, `order_items` | Orders and their line snapshots | The customer who placed it, or any staff member |
+
+Money is stored as integer **piastres** (1 EGP = 100). Never a float: `0.1 + 0.2`
+is `0.30000000000000004` in binary floating point, and a bill that is wrong by a
+fraction of a piastre is a bug nobody can explain at the counter.
+
+### How an order is placed
+
+Clients have **no INSERT privilege on `orders` or `order_items`, and no policy
+that would allow one.** The only way in is `place_order(...)`, and the browser
+sends nothing but ids and quantities:
+
+```js
+supabase.rpc('place_order', {
+  p_items: [{ menu_item_id: '…', quantity: 2 }],
+  p_customer_name: 'Yassen',
+  p_customer_phone: '01000000000',
+  p_fulfilment: 'pickup',       // or 'delivery', which then requires p_address
+})
+```
+
+The function reads every name and price from `menu_items` itself, binds the order
+to `auth.uid()`, collapses duplicate lines, and refuses the whole order if any
+item has become unavailable rather than quietly shipping a smaller one. Verified
+directly: a payload with an extra `"price_piastres": 1` on a 110 EGP latte
+produced an order for 110 EGP — the injected price is never read.
+
+It is `SECURITY DEFINER`, which is what lets it write to tables the caller
+cannot, and therefore also what makes it the one function here that has to do its
+own authorization. It does: a null `auth.uid()` is rejected, and `EXECUTE` is
+granted to `authenticated` only. The security advisor flags it, as it flags every
+`SECURITY DEFINER` function reachable by signed-in users; in this case that is
+the intended design and not a finding.
+
+### Privileges
+
+Supabase's default privileges grant `anon` and `authenticated` the full set —
+including `TRUNCATE` — on every new table in `public`, and rely on RLS to hold the
+line. That is not enough on its own, and both gaps were confirmed on this project
+before being closed:
+
+- **`TRUNCATE` is not subject to RLS.** Proven on a scratch table with RLS
+  enabled and no policies at all: the truncate succeeded, silently. Any signed-in
+  user could have emptied the menu.
+- **A table-level `UPDATE` grant silently overrides a column-level one**, so
+  "staff may only change an order's status" was not actually being enforced.
+
+`20260730042356_restrict_client_table_privileges.sql` revokes everything from
+both client roles and grants back only what each needs. The result, which is
+worth re-checking after any schema change:
+
+| Role | `menu_*` | `profiles` | `staff` | `orders` | `order_items` |
+| --- | --- | --- | --- | --- | --- |
+| `anon` | select | — | — | — | — |
+| `authenticated` | select | select, insert, update | select | select, `update (status)` | select |
+
+`TRUNCATE`, `DELETE`, `REFERENCES` and `TRIGGER` are held by neither, on any
+table, and are revoked from the schema's default privileges so future tables
+start the same way.
+
+### Sign-in
+
+Passwordless email, no password to store or leak. Supabase serves magic links and
+six-digit codes from the same endpoint; which one arrives depends entirely on the
+Magic Link email template.
+
+**One dashboard step is needed for the code flow**, which is the one the UI leads
+with because it keeps the customer on the page they were ordering from and needs
+no redirect configuration. In
+[Authentication → Email Templates](https://supabase.com/dashboard/project/_/auth/templates),
+edit **Magic Link** to include the token:
+
+```html
+<h2>Your Solis sign-in code</h2>
+<p>Enter this code to sign in: <strong>{{ .Token }}</strong></p>
+```
+
+Until that is done the email contains a link instead, which also works — tapping
+it returns to the site signed in — provided the site's URL is listed under
+Authentication → URL Configuration. The dialog says as much, so neither state is
+a dead end.
+
+To make someone staff, add their `auth.users` id to the `staff` table. They then
+see every order in the drawer and can move an order's status along.
+
+### Configuration
+
+`.env` holds the project URL and the **publishable** key. Both are public by
+design — the key identifies the project, carries no privileges of its own, and is
+shipped to every browser that loads the site — so they are committed, and a fresh
+clone or a Vercel build works with no setup. Override them in the host's
+environment or in `.env.local` to point at a different project.
+
+The `service_role` / secret key must never appear in this repo, and never in a
+`VITE_`-prefixed variable: Vite inlines every one of those into the client
+bundle.
+
+### Why the SDK is loaded on demand
+
+`@supabase/supabase-js` is 62 kB gzipped. Imported normally it took the main
+bundle from 115 kB to 178 kB — a 54% increase on the first load of a page whose
+job above the fold is a video and a menu, for a feature most visitors never open.
+So the anonymous menu read goes through a plain `fetch` against PostgREST
+(`restSelect` in `src/lib/supabase.js`; two headers and a query string is the
+whole protocol), and the SDK is dynamically imported only when someone starts
+ordering — warmed the moment the first item enters the cart, so it has arrived by
+the time the drawer is opened. The main bundle is 119 kB, and the SDK plus drawer
+are separate chunks.
+
+### Payments
+
+Orders currently reach the counter and are paid there. Taking payment online
+needs a gateway with an Egyptian merchant account — Paymob, Fawry, Kashier,
+PayTabs, Amazon Payment Services or Geidea; Stripe does not offer Egyptian
+merchant accounts. That work is a server-side step, not a client one: the
+callback that marks an order paid must be verified with the gateway's secret,
+which cannot live in this bundle. The natural home is a Supabase Edge Function
+holding the secret, with a `payment_status` column that only it can write.
 
 ## Animation notes
 
@@ -144,7 +302,18 @@ the UI.
 - **No percentage transforms in CSS on GSAP-animated elements.** Computed style
   reports them already resolved to pixels, so GSAP cannot tell `-101%` from
   `-670px` and a later `yPercent` tween fights the CSS. Where an element slides
-  in from off-screen, the offset is owned by the timeline.
+  in from off-screen, the offset is owned by the timeline. This has now caught
+  three elements — the nav overlay, the cart drawer (`translateX(100%)` left
+  390px behind, so the sheet never arrived) and the cart pill (`translateY(120%)`
+  parked it 41px below the bottom of the screen, with 8px still visible, which is
+  why it looked almost right). If a GSAP-animated element ends up offset by
+  roughly its own size, this is why.
+- **The cart drawer does not lock the body.** `overflow: hidden` on `<body>` is
+  the usual way to stop the page behind a drawer, but the document's height comes
+  from a spacer ScrollSmoother maintains; collapsing it mid-scroll resets
+  `scrollTop`, so the page jumps to the top on open and stays there on close.
+  Instead the smoother is paused, the scrim takes `touch-action: none`, and wheel
+  events over it are cancelled — nothing that changes layout.
 
 ## Images
 
@@ -163,7 +332,7 @@ recursive, so the folder never produces extra gallery entries.
 ## Browser support
 
 Evergreen Chrome, Safari, Firefox and their mobile counterparts. Uses
-`color-mix()`, `clamp()`, `100svh`, `aspect-ratio` and `backdrop-filter`.
+`color-mix()`, `clamp()`, `100svh`, `aspect-ratio`, `backdrop-filter` and `:has()`.
 
 ## Still invented — replace before launch
 
@@ -174,6 +343,11 @@ The logo, photography and menu are real. These are not:
 - Opening hours — `Visit.jsx`, `Footer.jsx`, `Nav.jsx`, `Hero.jsx`
 - The "Open in maps" link — `Visit.jsx`
 - Section copy in `Story.jsx` and the six blurbs in `Showcase.jsx`
+
+Also outstanding before taking real orders: edit the Magic Link email template so
+sign-in codes are sent (see [Sign-in](#sign-in)), add the deployed URL under
+Authentication → URL Configuration, and add at least one row to `staff` so
+somebody can see the order queue.
 
 ## Deploying
 

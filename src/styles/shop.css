@@ -1,0 +1,694 @@
+/* ============================================================================
+   SHOP — cart button, drawer, checkout, order history
+   ----------------------------------------------------------------------------
+   Mobile-first: the drawer is a full-width sheet on a phone and a right-hand
+   panel from tablet up. Everything here borrows the site's existing surfaces —
+   deep green, white type, the sun accent for money — so ordering does not look
+   like a bolted-on widget.
+   ========================================================================== */
+
+/* ---- Add-to-cart control on a menu row ---------------------------------- */
+
+/* The row is `grid-template-columns: auto 1fr auto` for name / leader / price.
+   A fourth child would otherwise wrap onto a second row, so widen the track —
+   but only for rows that actually have a button, or every row picks up a
+   trailing column gap it does not need. */
+.menu__row:has(.menu__add) {
+  grid-template-columns: auto 1fr auto auto;
+}
+
+.menu__add {
+  flex: none;
+  display: grid;
+  place-items: center;
+  /* The row aligns to baseline, which a 34px circle has no useful one of. */
+  align-self: center;
+  width: 34px;
+  height: 34px;
+  margin-left: 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: color-mix(in srgb, var(--white) 6%, transparent);
+  color: var(--fg);
+  font-size: 1.15rem;
+  line-height: 1;
+  /* The row's own reveal animation drives opacity, so only paint properties
+     are transitioned here — animating opacity too would fight it. */
+  transition: background-color 0.3s var(--ease-out), border-color 0.3s var(--ease-out),
+    transform 0.3s var(--ease-out), color 0.3s var(--ease-out);
+}
+
+.menu__add:hover,
+.menu__add:focus-visible {
+  background: var(--sun);
+  border-color: var(--sun);
+  color: var(--ink);
+}
+
+.menu__add:active {
+  transform: scale(0.88);
+}
+
+/* Briefly confirms the tap. On a phone there is no hover to acknowledge it and
+   the drawer stays shut, so without this nothing visibly happens. */
+.menu__add.is-added {
+  background: var(--sun);
+  border-color: var(--sun);
+  color: var(--ink);
+}
+
+/* ---- Floating cart button ----------------------------------------------- */
+
+.cart-fab {
+  position: fixed;
+  right: var(--gutter);
+  bottom: calc(env(safe-area-inset-bottom) + 1.1rem);
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.85rem 1.3rem;
+  border-radius: 999px;
+  background: var(--sun);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: 0 14px 40px -12px color-mix(in srgb, var(--ink) 85%, transparent);
+  /* Hidden until there is something in the cart; CartFab.jsx animates it in.
+     The offset is set in JS, not here: getComputedStyle resolves a percentage
+     translate to pixels, so a CSS `translateY(120%)` comes back to GSAP as
+     `y: 58px`, and animating yPercent to 0 then leaves those 58px behind —
+     parking the button just below the bottom of the screen. Opacity is safe to
+     set here because it has no such ambiguity. */
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cart-fab.is-visible {
+  pointer-events: auto;
+}
+
+.cart-fab__count {
+  display: grid;
+  place-items: center;
+  min-width: 1.4em;
+  height: 1.4em;
+  padding: 0 0.35em;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 88%, transparent);
+  color: var(--white);
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The drawer covers the button; keeping it on top of the scrim would look like
+   a second, contradictory control. */
+body.cart-open .cart-fab {
+  visibility: hidden;
+}
+
+/* ---- Drawer shell ------------------------------------------------------- */
+
+.shop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.shop__scrim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--ink) 72%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  /* A touch drag starting here must not scroll the page behind the drawer.
+     See the comment in CartDrawer.jsx for why the body is left alone. */
+  touch-action: none;
+}
+
+.shop__sheet {
+  position: absolute;
+  inset: 0 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 27rem);
+  background: var(--forest);
+  border-left: 1px solid var(--rule);
+  /* Deliberately no `transform: translateX(100%)` to park it off-canvas.
+     getComputedStyle resolves a percentage translate to pixels, so GSAP would
+     read it back as `x: 390px` rather than `xPercent: 100`; animating xPercent
+     to 0 then leaves that 390px in place and the sheet never arrives. The
+     timeline in CartDrawer.jsx owns the offset instead. Hiding the sheet before
+     it runs is `.shop`'s job — it is `visibility: hidden` until opened. */
+}
+
+/* iOS: an element with `height: 100%` inside a fixed parent is fine, but the
+   scrolling child needs its own containment or the body scrolls instead. */
+.shop__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 0 var(--gutter) 1.5rem;
+}
+
+.shop__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: calc(env(safe-area-inset-top) + 1rem) var(--gutter) 0.9rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.shop__tabs {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.shop__tab {
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  transition: color 0.3s var(--ease-out), background-color 0.3s var(--ease-out);
+}
+
+.shop__tab.is-active {
+  background: color-mix(in srgb, var(--white) 12%, transparent);
+  color: var(--fg);
+}
+
+.shop__close {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+}
+
+.shop__close span {
+  position: absolute;
+  inset: 50% 11px auto;
+  height: 1px;
+  background: var(--fg);
+}
+
+.shop__close span:first-child {
+  transform: rotate(45deg);
+}
+
+.shop__close span:last-child {
+  transform: rotate(-45deg);
+}
+
+.shop__back {
+  align-self: flex-start;
+  padding: 0.9rem var(--gutter) 0;
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+/* ---- Cart lines --------------------------------------------------------- */
+
+.shop__lines {
+  display: grid;
+  gap: 0.2rem;
+  padding-top: 1.2rem;
+}
+
+.shop__line {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'text    remove'
+    'stepper total';
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  padding: 0.95rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--white) 9%, transparent);
+}
+
+.shop__line-text {
+  grid-area: text;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.shop__line-name {
+  font-size: var(--t-base);
+  line-height: 1.25;
+}
+
+.shop__line-meta,
+.shop__optional {
+  margin-left: 0.5em;
+  font-size: 0.75em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+
+.shop__line-unit {
+  font-size: var(--t-xs);
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.shop__stepper {
+  grid-area: stepper;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  justify-self: start;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.shop__stepper button {
+  width: 38px;
+  height: 34px;
+  color: var(--fg);
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: background-color 0.25s var(--ease-out);
+}
+
+.shop__stepper button:hover,
+.shop__stepper button:focus-visible {
+  background: color-mix(in srgb, var(--white) 12%, transparent);
+}
+
+.shop__stepper span {
+  min-width: 1.6ch;
+  text-align: center;
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.shop__line-total {
+  grid-area: total;
+  justify-self: end;
+  font-family: var(--font-display);
+  font-size: var(--t-base);
+  color: var(--sun);
+  font-variant-numeric: tabular-nums;
+}
+
+.shop__line-remove {
+  grid-area: remove;
+  justify-self: end;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  color: var(--fg-faint);
+  font-size: 1.2rem;
+  line-height: 1;
+  transition: color 0.25s var(--ease-out), background-color 0.25s var(--ease-out);
+}
+
+.shop__line-remove:hover,
+.shop__line-remove:focus-visible {
+  background: color-mix(in srgb, var(--white) 12%, transparent);
+  color: var(--fg);
+}
+
+/* ---- Totals, buttons --------------------------------------------------- */
+
+.shop__foot {
+  display: grid;
+  gap: 0.9rem;
+  padding-top: 1.4rem;
+}
+
+.shop__subtotal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.4rem;
+  font-size: var(--t-sm);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.shop__subtotal strong {
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sun);
+  font-variant-numeric: tabular-nums;
+}
+
+.shop__btn {
+  min-height: 50px;
+  padding: 0.85rem 1.4rem;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-align: center;
+  transition: transform 0.3s var(--ease-out), background-color 0.3s var(--ease-out),
+    opacity 0.3s var(--ease-out);
+}
+
+.shop__btn--primary {
+  background: var(--sun);
+  color: var(--ink);
+}
+
+.shop__btn--primary:hover:not(:disabled),
+.shop__btn--primary:focus-visible:not(:disabled) {
+  background: var(--honey);
+}
+
+.shop__btn--quiet {
+  border: 1px solid var(--rule);
+  color: var(--fg-dim);
+}
+
+.shop__btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.shop__btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* ---- Forms ------------------------------------------------------------- */
+
+.shop__form {
+  display: grid;
+  gap: 0.55rem;
+  padding-top: 1.3rem;
+}
+
+.shop__label {
+  font-size: var(--t-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.shop__label:not(:first-child) {
+  margin-top: 0.6rem;
+}
+
+.shop__input {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+  color: var(--fg);
+  /* 16px minimum: anything smaller and iOS Safari zooms the page on focus,
+     which on a fixed drawer leaves the layout stranded off-screen. */
+  font-family: var(--font-body);
+  font-size: 1rem;
+  transition: border-color 0.3s var(--ease-out);
+}
+
+.shop__input::placeholder {
+  color: var(--fg-faint);
+}
+
+.shop__input:focus-visible {
+  outline: none;
+  border-color: var(--sun);
+}
+
+.shop__input--code {
+  font-size: 1.5rem;
+  letter-spacing: 0.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop__choice {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  border: 0;
+}
+
+.shop__choice legend {
+  margin-bottom: 0.45rem;
+}
+
+.shop__radio {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 46px;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-size: var(--t-sm);
+  cursor: pointer;
+  transition: border-color 0.3s var(--ease-out), background-color 0.3s var(--ease-out);
+}
+
+.shop__radio:has(input:checked) {
+  border-color: var(--sun);
+  background: color-mix(in srgb, var(--sun) 14%, transparent);
+}
+
+.shop__radio input {
+  accent-color: var(--sun);
+}
+
+.shop__hint,
+.shop__muted {
+  font-size: var(--t-xs);
+  line-height: 1.6;
+  color: var(--fg-faint);
+}
+
+.shop__muted {
+  padding: 1.6rem 0;
+  font-size: var(--t-sm);
+}
+
+.shop__auth-lede {
+  padding-top: 1.4rem;
+  font-size: var(--t-base);
+  line-height: 1.5;
+  color: var(--fg-dim);
+}
+
+.shop__error {
+  margin-top: 0.9rem;
+  padding: 0.75rem 0.95rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, #e0785f 55%, transparent);
+  background: color-mix(in srgb, #e0785f 14%, transparent);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: #ffd9cd;
+}
+
+/* ---- Confirmation ------------------------------------------------------ */
+
+.shop__done {
+  display: grid;
+  gap: 0.7rem;
+  padding: 2.4rem 0 1rem;
+  text-align: center;
+  justify-items: center;
+}
+
+.shop__done-number {
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--sun);
+  font-size: var(--t-sm);
+  letter-spacing: 0.16em;
+  color: var(--sun);
+}
+
+.shop__done-title {
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+}
+
+.shop__done-total {
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
+  color: var(--sun);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Order history ----------------------------------------------------- */
+
+.shop__orders {
+  display: grid;
+  gap: 0.9rem;
+  padding-top: 1.3rem;
+}
+
+.shop__order {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ink) 35%, transparent);
+}
+
+.shop__order-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.shop__order-number {
+  font-size: var(--t-sm);
+  letter-spacing: 0.12em;
+  color: var(--fg);
+}
+
+.shop__status {
+  padding: 0.25em 0.7em;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--white) 12%, transparent);
+  font-size: var(--t-xs);
+  letter-spacing: 0.04em;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+
+.shop__status--ready {
+  background: color-mix(in srgb, var(--sun) 26%, transparent);
+  color: var(--honey);
+}
+
+.shop__status--cancelled {
+  background: color-mix(in srgb, #e0785f 20%, transparent);
+  color: #ffd9cd;
+}
+
+.shop__order-meta {
+  margin-top: 0.3rem;
+  font-size: var(--t-xs);
+  color: var(--fg-faint);
+}
+
+.shop__order-lines {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.8rem 0;
+  padding-top: 0.7rem;
+  border-top: 1px solid color-mix(in srgb, var(--white) 9%, transparent);
+  font-size: var(--t-sm);
+}
+
+.shop__order-lines li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  color: var(--fg-dim);
+}
+
+.shop__order-qty {
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.shop__order-line-total {
+  margin-left: auto;
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.shop__order-note {
+  margin-bottom: 0.6rem;
+  font-size: var(--t-sm);
+  font-style: italic;
+  color: var(--fg-faint);
+}
+
+.shop__order-total {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--t-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+
+.shop__order-total strong {
+  font-family: var(--font-display);
+  font-size: var(--t-base);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sun);
+}
+
+/* ---- Account strip ----------------------------------------------------- */
+
+.shop__account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem var(--gutter) calc(env(safe-area-inset-bottom) + 0.9rem);
+  border-top: 1px solid var(--rule);
+  font-size: var(--t-xs);
+  color: var(--fg-faint);
+}
+
+.shop__account > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shop__account button {
+  flex: none;
+  color: var(--fg-dim);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.shop__badge {
+  margin-left: 0.5em;
+  padding: 0.15em 0.5em;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sun) 24%, transparent);
+  color: var(--honey);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ---- Snapshot notice --------------------------------------------------- */
+
+/* Shown when the menu came from the bundled copy rather than the database, so
+   the missing add buttons have an explanation. */
+.menu__offline {
+  margin-top: 1.4rem;
+  padding: 0.75rem 1rem;
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius);
+  font-size: var(--t-xs);
+  line-height: 1.6;
+  color: var(--fg-faint);
+}
