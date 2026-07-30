@@ -313,8 +313,11 @@ export default function Hero({ loaded, onNavigate }) {
         </p>
 
         <div className="hero__actions" data-hero-fade>
+          {/* Both land on the menu, which is also the ordering surface — the add
+              buttons sit on the price rows themselves, so there is nowhere else
+              for an "order" button to send anyone. */}
           <button className="btn" onClick={() => onNavigate?.('#menu')}>
-            See the menu
+            Order now
           </button>
           <button className="btn btn--ghost" onClick={() => onNavigate?.('#visit')}>
             Find us

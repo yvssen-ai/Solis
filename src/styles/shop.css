@@ -679,6 +679,12 @@ body.cart-open .cart-fab {
   text-transform: uppercase;
 }
 
+/* Only rendered when the menu is live and the rows really do have add buttons,
+   so it can never point at a control that is not there. */
+.menu__order-hint {
+  color: var(--sun);
+}
+
 /* ---- Snapshot notice --------------------------------------------------- */
 
 /* Shown when the menu came from the bundled copy rather than the database, so

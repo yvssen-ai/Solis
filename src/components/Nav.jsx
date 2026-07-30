@@ -118,7 +118,7 @@ export default function Nav({ onNavigate }) {
 
         <div className="nav__right">
           <a className="nav__cta" href="#menu" onClick={(e) => { e.preventDefault(); onNavigate?.('#menu'); }}>
-            Menu
+            Order
           </a>
 
           <button

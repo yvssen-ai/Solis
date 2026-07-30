@@ -105,6 +105,10 @@ src/
     shop.css               add buttons, cart pill, drawer, checkout
 supabase/
   migrations/              schema, RLS, the place_order function, menu seed
+  functions/
+    notify-order/          emails each new order to the counter
+      index.ts             the handler: verify, read the order, send
+      email.ts             subject/text/html formatting, testable on its own
 ```
 
 ## Editing the menu
@@ -262,6 +266,70 @@ ordering — warmed the moment the first item enters the cart, so it has arrived
 the time the drawer is opened. The main bundle is 119 kB, and the SDK plus drawer
 are separate chunks.
 
+### Order notifications by email
+
+Every order emails the counter. A trigger on `public.orders` posts the new order's
+id to the `notify-order` edge function, which reads the order back and sends it
+through [Resend](https://resend.com).
+
+Only the id crosses the wire, deliberately: `place_order()` inserts the order row
+first and its line items immediately after, so anything assembled inside the
+trigger would describe an order with nothing in it. pg_net queues the request
+inside the transaction and sends it after commit, by which point the whole order
+is durable and readable.
+
+It sends from the server because it has to. Mail needs a provider API key, and
+Vite inlines every `VITE_` variable into the bundle — there is no version of this
+that is safe in the browser.
+
+**Setup — four secrets and two commands.** Get a free Resend API key (100
+emails/day, no domain needed to start), then:
+
+```bash
+supabase link --project-ref <project-ref>
+
+supabase secrets set \
+  RESEND_API_KEY=re_xxxxxxxx \
+  ORDER_NOTIFY_TO=you@gmail.com \
+  ORDER_WEBHOOK_SECRET="$(openssl rand -hex 32)"
+
+# --no-verify-jwt because the caller is Postgres, which has no user session.
+# The shared secret below is what actually authenticates the request.
+supabase functions deploy notify-order --no-verify-jwt
+```
+
+Then tell the database where to post, in the SQL editor — using the *same* random
+string you set as `ORDER_WEBHOOK_SECRET`:
+
+```sql
+select vault.create_secret(
+  'https://<project-ref>.supabase.co/functions/v1/notify-order', 'order_webhook_url');
+select vault.create_secret('<the same random string>', 'order_webhook_secret');
+```
+
+Until both vault secrets exist the trigger is a no-op — orders are still taken,
+they just are not emailed. That is the deliberate failure mode: a mail outage
+must never be a reason to refuse a customer's order, so the trigger swallows its
+own errors and logs a warning.
+
+To see what was delivered:
+
+```sql
+select status_code, content, created from net._http_response order by created desc limit 10;
+```
+
+`ORDER_NOTIFY_TO` accepts a comma-separated list if more than one person should
+get them. Once you have a domain verified with Resend, set `ORDER_NOTIFY_FROM` to
+an address on it — the shared `onboarding@resend.dev` sender works immediately but
+is far more likely to land in spam.
+
+The email body is formatted in `supabase/functions/notify-order/email.ts`, kept
+free of Deno and network APIs so it can be tested on its own. It is table-based
+with inline styles because Gmail strips `<style>` blocks and ignores flexbox and
+grid outright — anything cleverer arrives as a stack of unstyled text on exactly
+the client this is aimed at. Customer names and notes are HTML-escaped: they are
+free text typed by a stranger and they land in your inbox.
+
 ### Payments
 
 Orders currently reach the counter and are paid there. Taking payment online
@@ -344,10 +412,14 @@ The logo, photography and menu are real. These are not:
 - The "Open in maps" link — `Visit.jsx`
 - Section copy in `Story.jsx` and the six blurbs in `Showcase.jsx`
 
-Also outstanding before taking real orders: edit the Magic Link email template so
-sign-in codes are sent (see [Sign-in](#sign-in)), add the deployed URL under
-Authentication → URL Configuration, and add at least one row to `staff` so
-somebody can see the order queue.
+Also outstanding before taking real orders:
+
+1. Edit the Magic Link email template so sign-in codes are sent — see
+   [Sign-in](#sign-in).
+2. Add the deployed URL under Authentication → URL Configuration.
+3. Deploy `notify-order` and set its secrets, or orders arrive silently — see
+   [Order notifications by email](#order-notifications-by-email).
+4. Add at least one row to `staff` so somebody can see the order queue.
 
 ## Deploying
 

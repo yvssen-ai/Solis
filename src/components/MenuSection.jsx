@@ -155,7 +155,8 @@ export default function MenuSection() {
         <h2 className="menu__title">Everything we make, all in one place.</h2>
         <p className="lede" data-reveal>
           {totalItems} items across {menu.length} sections. All prices in Egyptian Pounds
-          (L.E).
+          (L.E).{' '}
+          {isLive && <span className="menu__order-hint">Tap + on anything to start an order.</span>}
         </p>
       </div>
 
