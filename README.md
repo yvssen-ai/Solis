@@ -71,6 +71,7 @@ src/
   App.jsx                  ScrollSmoother setup, section order, scroll-to
   lib/
     gsap.js                single place every GSAP plugin is registered
+    scrollToSection.js     in-page navigation that re-aims as the page shifts
     supabase.js            config, on-demand client loader, money + error helpers
   data/
     menu.js                ← bundled menu snapshot (the offline fallback)
@@ -219,25 +220,47 @@ start the same way.
 
 ### Sign-in
 
-Passwordless email, no password to store or leak. Supabase serves magic links and
-six-digit codes from the same endpoint; which one arrives depends entirely on the
-Magic Link email template.
+Passwordless email, no password to store or leak. Supabase sends magic links and
+six-digit codes through the same endpoint; which one arrives depends entirely on
+what the email templates contain.
 
-**One dashboard step is needed for the code flow**, which is the one the UI leads
-with because it keeps the customer on the page they were ordering from and needs
-no redirect configuration. In
+**Two templates need editing, not one.** Which template Supabase uses depends on
+something the site cannot see — whether that address already has an account:
+
+| Who is signing in | Template used | Default subject |
+| --- | --- | --- |
+| First time — no account yet | **Confirm signup** | "Confirm your email address" |
+| Everyone after that | **Magic Link** | "Your sign-in link" |
+
+Editing only Magic Link therefore appears to do nothing, because every new
+customer is on the other path. In
 [Authentication → Email Templates](https://supabase.com/dashboard/project/_/auth/templates),
-edit **Magic Link** to include the token:
+set **both** to something like:
 
 ```html
 <h2>Your Solis sign-in code</h2>
 <p>Enter this code to sign in: <strong>{{ .Token }}</strong></p>
 ```
 
-Until that is done the email contains a link instead, which also works — tapping
-it returns to the site signed in — provided the site's URL is listed under
-Authentication → URL Configuration. The dialog says as much, so neither state is
-a dead end.
+`{{ .Token }}` is the six-digit code. Leave `{{ .ConfirmationURL }}` out — an
+email containing both invites people to tap the link instead, which is the path
+that needs redirect configuration.
+
+Once the templates are right, **no URL configuration is needed at all**:
+`verifyOtp` is a plain API call and never redirects. That is why the dialog leads
+with the code.
+
+If you would rather keep links, the site's own URL must be set as **Site URL**
+and listed under **Redirect URLs** in
+[Authentication → URL Configuration](https://supabase.com/dashboard/project/_/auth/url-configuration).
+A link that lands on `localhost:3000` means neither has been set — that is the
+default Site URL, and Supabase falls back to it whenever `emailRedirectTo` is not
+on the allow-list.
+
+On the client, `verifyCode` tries the `email`, `signup` and `magiclink` token
+types in turn, so a code works whichever of the two emails produced it, and a
+project whose templates were set up one at a time still signs people in rather
+than telling a customer their correct code is wrong.
 
 To make someone staff, add their `auth.users` id to the `staff` table. They then
 see every order in the drawer and can move an order's status along.
@@ -376,6 +399,20 @@ holding the secret, with a `payment_status` column that only it can write.
   parked it 41px below the bottom of the screen, with 8px still visible, which is
   why it looked almost right). If a GSAP-animated element ends up offset by
   roughly its own size, this is why.
+- **In-page navigation re-aims every frame.** `gsap.to(window, { scrollTo })`,
+  `element.scrollIntoView({ behavior: 'smooth' })` and `smoother.scrollTo()` all
+  resolve their destination once, when called, and then animate blindly toward
+  that number. On a phone the trip from the hero to the menu passes four sections
+  of photographs that are still decoding, and each one that lands mid-flight
+  pushes the target further down — so the scroll arrives where the menu *was*.
+  Measured: with 600px inserted above the target mid-scroll, all three finish
+  exactly 600px short. `lib/scrollToSection.js` recomputes the target each frame
+  and eases the remaining gap instead. The old tween also had `autoKill: true`,
+  which cancelled it the moment a thumb touched the screen.
+- **The cart pill and the scroll-progress dial are in opposite corners.** They
+  were both `right: var(--gutter); bottom: env(safe-area-inset-bottom) + 1.1rem`
+  and rendered on top of each other. Anything else added to a screen corner
+  should check `.progress` and `.cart-fab` first.
 - **The cart drawer does not lock the body.** `overflow: hidden` on `<body>` is
   the usual way to stop the page behind a drawer, but the document's height comes
   from a spacer ScrollSmoother maintains; collapsing it mid-scroll resets
@@ -414,12 +451,14 @@ The logo, photography and menu are real. These are not:
 
 Also outstanding before taking real orders:
 
-1. Edit the Magic Link email template so sign-in codes are sent — see
-   [Sign-in](#sign-in).
-2. Add the deployed URL under Authentication → URL Configuration.
-3. Deploy `notify-order` and set its secrets, or orders arrive silently — see
+1. Put `{{ .Token }}` in **both** the *Confirm signup* and *Magic Link* email
+   templates, or nobody can sign in — see [Sign-in](#sign-in). This is the one
+   that blocks everything else.
+2. Deploy `notify-order` and set its secrets, or orders arrive silently — see
    [Order notifications by email](#order-notifications-by-email).
-4. Add at least one row to `staff` so somebody can see the order queue.
+3. Add at least one row to `staff` so somebody can see the order queue.
+4. Optional, and only if you want the email links to work as well as the codes:
+   set Site URL and Redirect URLs to the deployed address.
 
 ## Deploying
 

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { gsap, useGSAP, ScrollTrigger, ScrollSmoother, prefersReducedMotion } from './lib/gsap';
+import { useGSAP, ScrollTrigger, ScrollSmoother, prefersReducedMotion } from './lib/gsap';
+import { scrollToSection } from './lib/scrollToSection';
 
 import Preloader from './components/Preloader';
 import Nav from './components/Nav';
@@ -68,14 +69,9 @@ export default function App() {
     ScrollTrigger.refresh();
   };
 
-  const scrollTo = (id) => {
-    const smoother = ScrollSmoother.get();
-    if (smoother) {
-      smoother.scrollTo(id, true, 'top top');
-    } else {
-      gsap.to(window, { duration: 1, scrollTo: { y: id, autoKill: true }, ease: 'solis' });
-    }
-  };
+  /* Re-aims every frame; see lib/scrollToSection.js for why nothing simpler
+     survives a photograph decoding mid-scroll on a phone. */
+  const scrollTo = scrollToSection;
 
   return (
     <AuthProvider>

@@ -127,17 +127,41 @@ export function AuthProvider({ children }) {
     [ensureClient]
   );
 
+  /**
+   * Exchange a six-digit code for a session.
+   *
+   * Three types are tried in turn, because which one a given code belongs to
+   * depends on something the client cannot see: whether that email address
+   * already had an account. A first-time customer gets Supabase's *Confirm
+   * signup* email and a `signup` token; everyone after that gets *Magic Link*
+   * and a `magiclink` token. `email` is the generic type that is meant to cover
+   * both, and normally does — the other two are here so that a project whose
+   * templates were set up one at a time still works instead of telling a real
+   * customer their correct code is wrong.
+   *
+   * Only "that token is not valid" answers fall through to the next attempt. A
+   * rate limit or a network failure is returned immediately, since retrying
+   * those twice more would make things worse.
+   */
   const verifyCode = useCallback(
     async (email, token) => {
       const active = await ensureClient();
       if (!active) return { error: new Error('Ordering is not available right now.') };
 
-      const { error } = await active.auth.verifyOtp({
-        email: email.trim(),
-        token: token.trim(),
-        type: 'email',
-      });
-      return { error };
+      const address = email.trim();
+      const otp = token.trim();
+      let lastError = null;
+
+      for (const type of ['email', 'signup', 'magiclink']) {
+        const { error } = await active.auth.verifyOtp({ email: address, token: otp, type });
+        if (!error) return { error: null };
+
+        lastError = error;
+        const retryable = /token|otp|expired|invalid|not found/i.test(String(error.message ?? ''));
+        if (!retryable) break;
+      }
+
+      return { error: lastError };
     },
     [ensureClient]
   );

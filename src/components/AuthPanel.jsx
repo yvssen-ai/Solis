@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { friendlyError } from '../lib/supabase';
 
@@ -16,9 +16,18 @@ export default function AuthPanel({ reason }) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
+  /* Supabase rate-limits these per address; offering the button freely just
+     earns a 429 that reads to the customer as "it is broken". */
+  const [cooldown, setCooldown] = useState(0);
 
-  const submitEmail = async (event) => {
-    event.preventDefault();
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((n) => n - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
+  const send = async () => {
     setError(null);
     setBusy(true);
     const { error: failure } = await sendCode(email);
@@ -26,14 +35,26 @@ export default function AuthPanel({ reason }) {
 
     if (failure) {
       setError(friendlyError(failure, 'Could not send the code. Check the address and retry.'));
-      return;
+      return false;
     }
-    setStep('code');
+    setCooldown(45);
+    return true;
+  };
+
+  const submitEmail = async (event) => {
+    event.preventDefault();
+    if (await send()) setStep('code');
+  };
+
+  const resend = async () => {
+    setNotice(null);
+    if (await send()) setNotice('Sent again — use the newest code.');
   };
 
   const submitCode = async (event) => {
     event.preventDefault();
     setError(null);
+    setNotice(null);
     setBusy(true);
     const { error: failure } = await verifyCode(email, code);
     setBusy(false);
@@ -100,8 +121,17 @@ export default function AuthPanel({ reason }) {
             {busy ? 'Checking…' : 'Sign in'}
           </button>
           <p className="shop__hint">
-            If the email contains a link instead of a code, tapping it signs you in too.
+            It comes from Supabase Auth and can take a minute — check your spam folder
+            before trying again.
           </p>
+          <button
+            className="shop__btn shop__btn--quiet"
+            type="button"
+            disabled={busy || cooldown > 0}
+            onClick={resend}
+          >
+            {cooldown > 0 ? `Send again in ${cooldown}s` : 'Send it again'}
+          </button>
           <button
             className="shop__btn shop__btn--quiet"
             type="button"
@@ -114,6 +144,12 @@ export default function AuthPanel({ reason }) {
             Use a different address
           </button>
         </form>
+      )}
+
+      {notice && !error && (
+        <p className="shop__notice" role="status">
+          {notice}
+        </p>
       )}
 
       {error && (

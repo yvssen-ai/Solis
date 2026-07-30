@@ -61,8 +61,15 @@
 
 .cart-fab {
   position: fixed;
-  right: var(--gutter);
+  /* Left, not right. The scroll-progress dial is fixed at
+     `right: var(--gutter); bottom: env(safe-area-inset-bottom) + 1.1rem` — the
+     same two values this used to have — so the pill landed exactly on top of it
+     and both became unreadable. Opposite corners is the only arrangement that
+     cannot collide as the pill grows with the total. */
+  left: var(--gutter);
   bottom: calc(env(safe-area-inset-bottom) + 1.1rem);
+  /* Never let a long total reach the dial. */
+  max-width: calc(100% - var(--gutter) * 2 - 44px - 0.75rem);
   z-index: 70;
   display: inline-flex;
   align-items: center;
@@ -75,6 +82,7 @@
   font-size: var(--t-sm);
   font-weight: 600;
   letter-spacing: 0.02em;
+  white-space: nowrap;
   box-shadow: 0 14px 40px -12px color-mix(in srgb, var(--ink) 85%, transparent);
   /* Hidden until there is something in the cart; CartFab.jsx animates it in.
      The offset is set in JS, not here: getComputedStyle resolves a percentage
@@ -494,6 +502,17 @@ body.cart-open .cart-fab {
   font-size: var(--t-base);
   line-height: 1.5;
   color: var(--fg-dim);
+}
+
+.shop__notice {
+  margin-top: 0.9rem;
+  padding: 0.75rem 0.95rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--sun) 45%, transparent);
+  background: color-mix(in srgb, var(--sun) 12%, transparent);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--honey);
 }
 
 .shop__error {
