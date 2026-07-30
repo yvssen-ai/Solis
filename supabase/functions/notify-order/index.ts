@@ -111,8 +111,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
          verified — shared senders are far more likely to land in spam. */
       from: Deno.env.get('ORDER_NOTIFY_FROM') ?? 'Solis Orders <onboarding@resend.dev>',
       to: to.split(',').map((address) => address.trim()),
-      /* So hitting reply in Gmail reaches the customer, not Resend. */
-      reply_to: `${order.customer_name} <${to}>`,
+      /* No reply_to: orders are placed without an account, so there is no
+         customer address to reply to. The phone number in the body is how the
+         counter gets back to them, and it is a tel: link for exactly that. */
       subject: subjectFor(order),
       text: textFor(order),
       html: htmlFor(order),

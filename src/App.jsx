@@ -15,7 +15,6 @@ import Footer from './components/Footer';
 import ScrollProgress from './components/ScrollProgress';
 import Shop from './components/Shop';
 
-import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 
 export default function App() {
@@ -74,35 +73,33 @@ export default function App() {
   const scrollTo = scrollToSection;
 
   return (
-    <AuthProvider>
-      <CartProvider>
-        <div ref={root}>
-          <Preloader onDone={handleLoaderDone} />
-          <Nav onNavigate={scrollTo} />
-          <ScrollProgress />
+    <CartProvider>
+      <div ref={root}>
+        <Preloader onDone={handleLoaderDone} />
+        <Nav onNavigate={scrollTo} />
+        <ScrollProgress />
 
-          <div id="smooth-wrapper">
-            <div id="smooth-content">
-              <main>
-                <Hero loaded={loaded} onNavigate={scrollTo} />
-                <Marquee />
-                <Story />
-                <Showcase />
-                <MenuSection />
-                <Gallery />
-                <Visit />
-              </main>
-              <Footer onNavigate={scrollTo} />
-            </div>
+        <div id="smooth-wrapper">
+          <div id="smooth-content">
+            <main>
+              <Hero loaded={loaded} onNavigate={scrollTo} />
+              <Marquee />
+              <Story />
+              <Showcase />
+              <MenuSection />
+              <Gallery />
+              <Visit />
+            </main>
+            <Footer onNavigate={scrollTo} />
           </div>
-
-          {/* Outside #smooth-content on purpose. ScrollSmoother transforms that
-              element, and a transformed ancestor makes `position: fixed` resolve
-              against it rather than the viewport — a fixed drawer inside it
-              would scroll away with the page. */}
-          <Shop />
         </div>
-      </CartProvider>
-    </AuthProvider>
+
+        {/* Outside #smooth-content on purpose. ScrollSmoother transforms that
+            element, and a transformed ancestor makes `position: fixed` resolve
+            against it rather than the viewport — a fixed drawer inside it
+            would scroll away with the page. */}
+        <Shop />
+      </div>
+    </CartProvider>
   );
 }

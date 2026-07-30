@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { gsap, useGSAP, ScrollSmoother, prefersReducedMotion } from '../lib/gsap';
-import { formatPiastres, friendlyError } from '../lib/supabase';
+import { rpc, formatPiastres, friendlyError } from '../lib/supabase';
 import { useCart } from '../context/CartContext';
-import { useAuth } from '../context/AuthContext';
+import { rememberToken } from '../lib/orderTokens';
 import { CURRENCY } from '../data/menu';
-import AuthPanel from './AuthPanel';
 import OrderHistory from './OrderHistory';
 
 /**
@@ -13,19 +12,15 @@ import OrderHistory from './OrderHistory';
  * A single drawer rather than a page per step: on a phone the whole flow is
  * three thumb-reach taps from the menu, and the customer never loses their place
  * in the list they were reading.
+ *
+ * No account, and no step that asks for one. Checkout collects a name and a
+ * phone number, which is what the counter needs to hand the order over; what
+ * comes back is a receipt token kept on the device so the order can still be
+ * followed afterwards.
  */
 export default function CartDrawer() {
   const { lines, count, subtotalPiastres, isOpen, close, setQuantity, remove, clear, toPayload } =
     useCart();
-  const {
-    isSignedIn,
-    isStaff,
-    email,
-    signOut,
-    loading: authLoading,
-    client,
-    ensureClient,
-  } = useAuth();
 
   const root = useRef(null);
   const sheet = useRef(null);
@@ -126,12 +121,6 @@ export default function CartDrawer() {
     };
   }, [isOpen]);
 
-  /* Opening the drawer is the signal that this visitor intends to order, so pull
-     the SDK down now if the warm-up on first-add did not already. */
-  useEffect(() => {
-    if (isOpen) ensureClient();
-  }, [isOpen, ensureClient]);
-
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (event) => event.key === 'Escape' && close();
@@ -159,34 +148,31 @@ export default function CartDrawer() {
     setError(null);
     setBusy(true);
 
-    const active = client ?? (await ensureClient());
-    if (!active) {
-      setBusy(false);
-      setError('Ordering is not available right now.');
-      return;
-    }
+    try {
+      /* Only ids and quantities go over the wire. The function reads every price
+         from menu_items, so the total below is a preview, not an input. */
+      const order = await rpc('place_order', {
+        p_items: toPayload(),
+        p_customer_name: form.name,
+        p_customer_phone: form.phone,
+        p_fulfilment: form.fulfilment,
+        p_address: form.fulfilment === 'delivery' ? form.address : null,
+        p_notes: form.notes || null,
+      });
 
-    /* Only ids and quantities go over the wire. The function reads every price
-       from menu_items, so the total below is a preview, not an input. */
-    const { data, error: failure } = await active.rpc('place_order', {
-      p_items: toPayload(),
-      p_customer_name: form.name,
-      p_customer_phone: form.phone,
-      p_fulfilment: form.fulfilment,
-      p_address: form.fulfilment === 'delivery' ? form.address : null,
-      p_notes: form.notes || null,
-    });
+      /* The receipt token is the only thing that can retrieve this order later.
+         Store it before anything else touches state — if the drawer closed or
+         the tab died right here, the order would otherwise be untrackable. */
+      rememberToken(order?.public_token);
 
-    setBusy(false);
-
-    if (failure) {
+      setPlaced(order);
+      clear();
+      setView('done');
+    } catch (failure) {
       setError(friendlyError(failure, 'The order did not go through. Please try again.'));
-      return;
+    } finally {
+      setBusy(false);
     }
-
-    setPlaced(data);
-    clear();
-    setView('done');
   };
 
   const canSubmit =
@@ -272,11 +258,7 @@ export default function CartDrawer() {
     </>
   );
 
-  const checkoutView = authLoading ? (
-    <p className="shop__muted">One moment…</p>
-  ) : !isSignedIn ? (
-    <AuthPanel reason="Almost there — sign in so the counter knows whose order this is." />
-  ) : (
+  const checkoutView = (
     <form className="shop__form shop__stagger" onSubmit={submit}>
       <label className="shop__label" htmlFor="solis-name">
         Name for the order
@@ -291,7 +273,7 @@ export default function CartDrawer() {
       />
 
       <label className="shop__label" htmlFor="solis-phone">
-        Phone
+        Phone <span className="shop__optional">so we can call you</span>
       </label>
       <input
         id="solis-phone"
@@ -399,7 +381,7 @@ export default function CartDrawer() {
 
   const TABS = [
     { id: 'cart', label: count > 0 ? `Cart (${count})` : 'Cart' },
-    { id: 'orders', label: isStaff ? 'All orders' : 'My orders' },
+    { id: 'orders', label: 'My orders' },
   ];
 
   return (
@@ -443,25 +425,8 @@ export default function CartDrawer() {
           {view === 'cart' && cartView}
           {view === 'checkout' && checkoutView}
           {view === 'done' && doneView}
-          {view === 'orders' &&
-            (isSignedIn ? (
-              <OrderHistory isStaff={isStaff} />
-            ) : (
-              <AuthPanel reason="Sign in to see your orders." />
-            ))}
+          {view === 'orders' && <OrderHistory />}
         </div>
-
-        {isSignedIn && (
-          <footer className="shop__account">
-            <span>
-              {email}
-              {isStaff && <span className="shop__badge">Staff</span>}
-            </span>
-            <button type="button" onClick={signOut}>
-              Sign out
-            </button>
-          </footer>
-        )}
       </aside>
     </div>
   );

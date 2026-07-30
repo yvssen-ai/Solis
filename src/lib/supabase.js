@@ -1,32 +1,25 @@
 /**
- * Supabase access, split in two on purpose.
+ * Supabase access, over plain fetch.
  *
- * `@supabase/supabase-js` is 62 kB gzipped — auth, realtime, storage and
- * postgrest in one package. Importing it at the top level put the whole thing on
- * the critical path of a site whose first screen is a video and a menu, taking
- * the main bundle from 115 kB to 178 kB gzipped for a feature most visitors
- * never touch. So:
+ * There is no `@supabase/supabase-js` here, and that is the point. The package
+ * is 62 kB gzipped — auth, realtime, storage and postgrest together — and the
+ * only part this site ever needed was the ability to GET two tables and POST to
+ * two functions. Both are a handful of lines against PostgREST directly, and the
+ * browser already has fetch.
  *
- *   - Reading the menu, which every visitor does, goes through `restSelect()`
- *     below: a plain fetch against PostgREST. Two headers and a query string is
- *     the entire protocol for an anonymous read, and the browser already has
- *     fetch.
- *   - Everything stateful — sign-in, placing an order, realtime status — needs
- *     the real client, and is loaded by `loadSupabase()` the first time it is
- *     actually wanted.
+ * It was carried, lazily, for as long as customers had to sign in to order.
+ * Once ordering became name-and-phone there was no session to manage, no token
+ * to refresh and no socket to hold open, and the dependency went with it — worth
+ * roughly 57 kB of JavaScript that no longer has to exist.
  *
- * The client is a memoized singleton. Creating two would give them separate
- * auth listeners and separate realtime sockets.
+ *   restSelect()  anonymous table reads   → the menu
+ *   rpc()         function calls          → place_order, get_orders
  */
 
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 export const isSupabaseConfigured = Boolean(SUPABASE_URL && PUBLISHABLE_KEY);
-
-/* Where the session is kept. Named here rather than left to the default because
-   `hasStoredSession()` needs to look for it before the client exists. */
-export const AUTH_STORAGE_KEY = 'solis-auth';
 
 if (!isSupabaseConfigured && import.meta.env.DEV) {
   console.warn(
@@ -68,71 +61,45 @@ export async function restSelect(table, query) {
   return response.json();
 }
 
-/* ------------------------------------------------------------------------- */
-/* The full client, on demand                                               */
-/* ------------------------------------------------------------------------- */
-
-let clientPromise = null;
-
 /**
- * Resolve the shared Supabase client, importing the SDK on first call.
+ * Call a Postgres function through the Data API.
  *
- * Returns null when the project is not configured, which callers treat as
- * "ordering is off" rather than as an error.
- */
-export function loadSupabase() {
-  if (!isSupabaseConfigured) return Promise.resolve(null);
-
-  clientPromise ??= import('@supabase/supabase-js').then(({ createClient }) =>
-    createClient(SUPABASE_URL, PUBLISHABLE_KEY, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        /* Magic-link sign-in returns here with the session in the URL; this is
-           what reads it and then tidies the address bar. */
-        detectSessionInUrl: true,
-        flowType: 'pkce',
-        storageKey: AUTH_STORAGE_KEY,
-      },
-      global: { headers: { 'x-application-name': 'solis-web' } },
-    })
-  );
-
-  return clientPromise;
-}
-
-/**
- * Start downloading the SDK without waiting for it.
+ * PostgREST maps `POST /rest/v1/rpc/<name>` with a JSON body of named arguments
+ * onto a function call, and returns whatever the function returns. Both of the
+ * ones used here are SECURITY DEFINER and do their own checking — the client is
+ * `anon` and holds no privileges on the tables underneath.
  *
- * Called when the cart gets its first item: by the time the customer taps
- * through to checkout the chunk is usually already there, so the drawer opens at
- * full speed instead of waiting on a network round trip.
+ * Errors raised with RAISE EXCEPTION arrive as a JSON body with `message` set to
+ * the text the function chose, which is why place_order's messages are written
+ * to be read by a customer.
  */
-export const warmSupabase = () => {
-  if (isSupabaseConfigured) loadSupabase();
-};
+export async function rpc(fn, args) {
+  if (!isSupabaseConfigured) throw new Error('Ordering is not available right now.');
 
-/** Has this browser signed in before? Answered without loading the SDK. */
-export const hasStoredSession = () => {
-  try {
-    return Boolean(localStorage.getItem(AUTH_STORAGE_KEY));
-  } catch {
-    return false;
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: {
+      apikey: PUBLISHABLE_KEY,
+      authorization: `Bearer ${PUBLISHABLE_KEY}`,
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify(args ?? {}),
+  });
+
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    /* Prefer the function's own wording; fall back to something a person can
+       read rather than a bare status code. */
+    const error = new Error(body?.message || `Request failed (${response.status})`);
+    error.status = response.status;
+    error.details = body;
+    throw error;
   }
-};
 
-/**
- * Is there an auth response sitting in the current URL?
- *
- * PKCE comes back as `?code=`, the implicit flow as `#access_token=`, and either
- * failure mode as an `error` parameter. Any of them means the SDK has to
- * initialize now, before `detectSessionInUrl` has a chance to miss its window.
- */
-export const hasAuthInUrl = () => {
-  if (typeof window === 'undefined') return false;
-  const { search, hash } = window.location;
-  return /[?&](code|error|error_description)=/.test(search) || /access_token=|error=/.test(hash);
-};
+  return body;
+}
 
 /* ------------------------------------------------------------------------- */
 /* Money                                                                     */

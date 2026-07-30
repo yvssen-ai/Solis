@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { formatPiastres, friendlyError } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
+import { rpc, formatPiastres, friendlyError } from '../lib/supabase';
+import { readTokens } from '../lib/orderTokens';
 import { CURRENCY } from '../data/menu';
 
 const STATUS_LABEL = {
@@ -12,123 +12,135 @@ const STATUS_LABEL = {
   cancelled: 'Cancelled',
 };
 
+/* Anything past this is finished and will not change again. */
+const SETTLED = new Set(['completed', 'cancelled']);
+
+/** How often to re-check while the customer is watching. */
+const POLL_MS = 20000;
+
 /**
- * Past orders, newest first.
+ * Orders placed from this device, newest first.
  *
- * The select embeds order_items. There is no client-side filter by user here and
- * none is needed: the RLS policy on orders resolves to "your rows, or every row
- * if you are staff", and order_items follows its parent. Filtering in the query
- * as well would be theatre — and would quietly break the staff view.
+ * Looked up by the receipt tokens in localStorage rather than by who is signed
+ * in — there is no signing in. `get_orders` is SECURITY DEFINER and returns only
+ * the rows whose token was presented, so that is the whole authorization story.
+ *
+ * Status is polled rather than pushed. Realtime meant holding a websocket open,
+ * which was affordable while the SDK was already loaded for auth; with it gone,
+ * a 20-second poll costs a fraction of the same thing, runs only while the panel
+ * is open, and stops once every order has settled.
  */
-export default function OrderHistory({ isStaff }) {
-  const { session, client } = useAuth();
+export default function OrderHistory() {
   const [orders, setOrders] = useState(null);
   const [error, setError] = useState(null);
 
+  /* A stable dependency: the array identity changes on every render, the joined
+     string only when the tokens actually do. */
+  const tokenKey = readTokens().join(',');
+
   const load = useCallback(async () => {
-    if (!client) return;
-
-    const { data, error: failure } = await client
-      .from('orders')
-      .select(
-        `id, order_number, status, fulfilment, total_piastres, created_at,
-         customer_name, notes,
-         order_items ( id, name_snapshot, quantity, unit_price_piastres, line_total_piastres )`
-      )
-      .order('created_at', { ascending: false })
-      .limit(20);
-
-    if (failure) {
-      setError(friendlyError(failure, 'Could not load your orders.'));
+    if (!tokenKey) {
       setOrders([]);
       return;
     }
-    setError(null);
-    setOrders(data ?? []);
-  }, [client]);
+    try {
+      const data = await rpc('get_orders', { p_tokens: tokenKey.split(',') });
+      setError(null);
+      setOrders(Array.isArray(data) ? data : []);
+    } catch (failure) {
+      setError(friendlyError(failure, 'Could not check your orders just now.'));
+      setOrders((current) => current ?? []);
+    }
+  }, [tokenKey]);
 
   useEffect(() => {
     load();
-  }, [load, session]);
+  }, [load]);
 
-  /* Live status updates: the counter moves an order to "ready" and the customer's
-     phone reflects it without a refresh. Realtime respects RLS, so a customer is
-     only ever pushed their own rows. */
+  /* Keep checking only while something can still change. A collected order is
+     not going to move again, and a tab left open on the counter should not poll
+     all afternoon. */
   useEffect(() => {
-    if (!client || !session) return;
+    if (!orders?.length) return;
+    if (orders.every((order) => SETTLED.has(order.status))) return;
 
-    const channel = client
-      .channel('solis-orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => load())
-      .subscribe();
+    const timer = setInterval(load, POLL_MS);
+    const onVisible = () => document.visibilityState === 'visible' && load();
+    document.addEventListener('visibilitychange', onVisible);
 
     return () => {
-      client.removeChannel(channel);
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [client, session, load]);
+  }, [orders, load]);
 
-  if (orders === null) {
-    return <p className="shop__muted">Loading your orders…</p>;
-  }
-
-  if (error) {
-    return (
-      <p className="shop__error" role="alert">
-        {error}
-      </p>
-    );
-  }
+  if (orders === null) return <p className="shop__muted">Checking your orders…</p>;
 
   if (!orders.length) {
     return (
-      <p className="shop__muted">
-        Nothing here yet. Your orders will appear as soon as you place one.
-      </p>
+      <div>
+        <p className="shop__muted">
+          {error
+            ? 'Could not reach the counter just now.'
+            : 'Nothing here yet. Orders you place appear here so you can follow them.'}
+        </p>
+        {error && (
+          <p className="shop__error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
     );
   }
 
   return (
-    <ul className="shop__orders">
-      {orders.map((order) => (
-        <li className="shop__order" key={order.id}>
-          <header className="shop__order-head">
-            <span className="shop__order-number">{order.order_number}</span>
-            <span className={`shop__status shop__status--${order.status}`}>
-              {STATUS_LABEL[order.status] ?? order.status}
-            </span>
-          </header>
+    <>
+      <ul className="shop__orders">
+        {orders.map((order) => (
+          <li className="shop__order" key={order.order_number}>
+            <header className="shop__order-head">
+              <span className="shop__order-number">{order.order_number}</span>
+              <span className={`shop__status shop__status--${order.status}`}>
+                {STATUS_LABEL[order.status] ?? order.status}
+              </span>
+            </header>
 
-          <p className="shop__order-meta">
-            {new Date(order.created_at).toLocaleString('en-GB', {
-              day: 'numeric',
-              month: 'short',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-            {' · '}
-            {order.fulfilment === 'delivery' ? 'Delivery' : 'Pickup'}
-            {isStaff && ` · ${order.customer_name}`}
-          </p>
+            <p className="shop__order-meta">
+              {new Date(order.created_at).toLocaleString('en-GB', {
+                day: 'numeric',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+              {' · '}
+              {order.fulfilment === 'delivery' ? 'Delivery' : 'Pickup'}
+            </p>
 
-          <ul className="shop__order-lines">
-            {order.order_items.map((line) => (
-              <li key={line.id}>
-                <span className="shop__order-qty">{line.quantity}×</span>
-                {line.name_snapshot}
-                <span className="shop__order-line-total">
-                  {CURRENCY} {formatPiastres(line.line_total_piastres)}
-                </span>
-              </li>
-            ))}
-          </ul>
+            <ul className="shop__order-lines">
+              {order.items.map((line) => (
+                <li key={line.name}>
+                  <span className="shop__order-qty">{line.quantity}×</span>
+                  {line.name}
+                  <span className="shop__order-line-total">
+                    {CURRENCY} {formatPiastres(line.line_total_piastres)}
+                  </span>
+                </li>
+              ))}
+            </ul>
 
-          {order.notes && <p className="shop__order-note">“{order.notes}”</p>}
+            {order.notes && <p className="shop__order-note">“{order.notes}”</p>}
 
-          <p className="shop__order-total">
-            Total <strong>{CURRENCY} {formatPiastres(order.total_piastres)}</strong>
-          </p>
-        </li>
-      ))}
-    </ul>
+            <p className="shop__order-total">
+              Total{' '}
+              <strong>
+                {CURRENCY} {formatPiastres(order.total_piastres)}
+              </strong>
+            </p>
+          </li>
+        ))}
+      </ul>
+
+      <p className="shop__hint">Kept on this device — give your order number at the counter.</p>
+    </>
   );
 }

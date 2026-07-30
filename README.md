@@ -71,15 +71,15 @@ src/
   App.jsx                  ScrollSmoother setup, section order, scroll-to
   lib/
     gsap.js                single place every GSAP plugin is registered
+    orderTokens.js         receipt tokens kept on the device, in place of accounts
     scrollToSection.js     in-page navigation that re-aims as the page shifts
-    supabase.js            config, on-demand client loader, money + error helpers
+    supabase.js            fetch wrappers for PostgREST, money + error helpers
   data/
     menu.js                ← bundled menu snapshot (the offline fallback)
     images.js              gallery glob + logo slot
   hooks/
     useMenu.js             live menu from Supabase, falling back to the snapshot
   context/
-    AuthContext.jsx        session, staff flag, owns the Supabase client lifetime
     CartContext.jsx        cart lines, localStorage, place_order payload
   components/
     Preloader.jsx          sunrise reveal: rays draw, counter, slat wipe
@@ -96,8 +96,7 @@ src/
     Shop.jsx               mounts the cart button; lazy-loads the drawer
     CartFab.jsx            floating cart pill, count + running total
     CartDrawer.jsx         cart → checkout → confirmation, and order history
-    AuthPanel.jsx          passwordless email sign-in
-    OrderHistory.jsx       past orders with live status
+    OrderHistory.jsx       orders placed from this device, with polled status
   styles/
     tokens.css             ← the palette
     base.css               reset, type, buttons, reduced-motion
@@ -156,9 +155,9 @@ in `supabase/migrations/`, applied in filename order.
 | Table | What it is | Who can read it |
 | --- | --- | --- |
 | `menu_categories`, `menu_items` | The menu | Anyone — but only rows that are `is_active` / `is_available` |
-| `profiles` | Name and phone, keyed to the auth user | Only its owner |
+| `profiles` | Name and phone, keyed to an auth user | Only its owner |
 | `staff` | Membership = being staff | Only your own row |
-| `orders`, `order_items` | Orders and their line snapshots | The customer who placed it, or any staff member |
+| `orders`, `order_items` | Orders and their line snapshots | Nobody, directly — see below |
 
 Money is stored as integer **piastres** (1 EGP = 100). Never a float: `0.1 + 0.2`
 is `0.30000000000000004` in binary floating point, and a bill that is wrong by a
@@ -166,12 +165,15 @@ fraction of a piastre is a bug nobody can explain at the counter.
 
 ### How an order is placed
 
+Nobody signs in. Checkout asks for a name and a phone number, which is what the
+counter needs to hand a coffee over, and that is the whole identity model.
+
 Clients have **no INSERT privilege on `orders` or `order_items`, and no policy
 that would allow one.** The only way in is `place_order(...)`, and the browser
 sends nothing but ids and quantities:
 
 ```js
-supabase.rpc('place_order', {
+rpc('place_order', {
   p_items: [{ menu_item_id: '…', quantity: 2 }],
   p_customer_name: 'Yassen',
   p_customer_phone: '01000000000',
@@ -179,18 +181,44 @@ supabase.rpc('place_order', {
 })
 ```
 
-The function reads every name and price from `menu_items` itself, binds the order
-to `auth.uid()`, collapses duplicate lines, and refuses the whole order if any
-item has become unavailable rather than quietly shipping a smaller one. Verified
-directly: a payload with an extra `"price_piastres": 1` on a 110 EGP latte
+The function reads every name and price from `menu_items` itself, collapses
+duplicate lines, and refuses the whole order if any item has become unavailable
+rather than quietly shipping a smaller one. Verified directly against the live
+database: a payload with an extra `"price_piastres": 1` on a 110 EGP latte
 produced an order for 110 EGP — the injected price is never read.
 
 It is `SECURITY DEFINER`, which is what lets it write to tables the caller
-cannot, and therefore also what makes it the one function here that has to do its
-own authorization. It does: a null `auth.uid()` is rejected, and `EXECUTE` is
-granted to `authenticated` only. The security advisor flags it, as it flags every
-`SECURITY DEFINER` function reachable by signed-in users; in this case that is
-the intended design and not a finding.
+cannot, and therefore also what makes it the one place that has to do its own
+checking. The advisor flags it as callable by `anon`; that is now the intended
+design rather than a finding.
+
+### Reading an order back, without an account
+
+Every order gets a `public_token` — 122 random bits — returned once to whoever
+placed it and stored in their browser (`lib/orderTokens.js`). `get_orders(tokens)`
+answers only for tokens it is handed. It is a receipt in a pocket, not a login:
+whoever holds it can watch that order, and nothing else.
+
+Two consequences worth stating plainly:
+
+- **"My orders" is per-device.** Order on a phone and it is not on the laptop.
+  For a cafe that is the right trade — nobody should make an account to buy a
+  croissant, and the order number on screen is what the counter asks for anyway.
+- **`get_orders` deliberately returns no phone number, address or name.** A token
+  is enough to follow an order's progress and no more, so a phone left unlocked
+  on a table does not hand over someone's home address.
+
+Status is polled every 20 seconds while the panel is open, and stops once every
+order is collected or cancelled. Realtime was the previous approach; it needed a
+websocket, which needed the SDK, which is no longer here.
+
+### Stopping abuse
+
+Ownership used to be the limit — an order had to belong to a signed-in user. With
+the door open, `place_order` refuses a sixth order from the same phone number
+within ten minutes. It is a blunt instrument, and it is meant to be: a real
+customer never hits it, and it caps what a script can do without adding anything
+a customer has to think about.
 
 ### Privileges
 
@@ -218,52 +246,27 @@ worth re-checking after any schema change:
 table, and are revoked from the schema's default privileges so future tables
 start the same way.
 
-### Sign-in
+### Accounts (there are none)
 
-Passwordless email, no password to store or leak. Supabase sends magic links and
-six-digit codes through the same endpoint; which one arrives depends entirely on
-what the email templates contain.
+Customers do not sign in, and the site ships no sign-in UI.
 
-**Two templates need editing, not one.** Which template Supabase uses depends on
-something the site cannot see — whether that address already has an account:
+It did, briefly: passwordless email with a six-digit code. It was removed because
+the code never arrives on a default Supabase project. Editing the auth email
+templates requires configuring custom SMTP first, and until that is done the
+built-in sender uses fixed templates that send a *link*, pointed at the default
+Site URL — `localhost:3000` — and rate-limits itself to a couple of emails an
+hour. Every one of those is fixable, and none of it was worth making a customer
+do before buying a coffee.
 
-| Who is signing in | Template used | Default subject |
-| --- | --- | --- |
-| First time — no account yet | **Confirm signup** | "Confirm your email address" |
-| Everyone after that | **Magic Link** | "Your sign-in link" |
+The database side of accounts was left in place: `profiles`, `staff`, the
+`user_id` column on `orders` (now nullable) and the RLS policies that read them
+are all still there and still correct. `place_order` records `auth.uid()` when
+there is one. Re-enabling customer accounts later is a frontend job plus the SMTP
+setup, not a migration.
 
-Editing only Magic Link therefore appears to do nothing, because every new
-customer is on the other path. In
-[Authentication → Email Templates](https://supabase.com/dashboard/project/_/auth/templates),
-set **both** to something like:
-
-```html
-<h2>Your Solis sign-in code</h2>
-<p>Enter this code to sign in: <strong>{{ .Token }}</strong></p>
-```
-
-`{{ .Token }}` is the six-digit code. Leave `{{ .ConfirmationURL }}` out — an
-email containing both invites people to tap the link instead, which is the path
-that needs redirect configuration.
-
-Once the templates are right, **no URL configuration is needed at all**:
-`verifyOtp` is a plain API call and never redirects. That is why the dialog leads
-with the code.
-
-If you would rather keep links, the site's own URL must be set as **Site URL**
-and listed under **Redirect URLs** in
-[Authentication → URL Configuration](https://supabase.com/dashboard/project/_/auth/url-configuration).
-A link that lands on `localhost:3000` means neither has been set — that is the
-default Site URL, and Supabase falls back to it whenever `emailRedirectTo` is not
-on the allow-list.
-
-On the client, `verifyCode` tries the `email`, `signup` and `magiclink` token
-types in turn, so a code works whichever of the two emails produced it, and a
-project whose templates were set up one at a time still signs people in rather
-than telling a customer their correct code is wrong.
-
-To make someone staff, add their `auth.users` id to the `staff` table. They then
-see every order in the drawer and can move an order's status along.
+**Staff** read the order queue from the emails and from the Supabase dashboard's
+Table Editor. The `staff` table and its policies still work if a signed-in staff
+view is wanted later.
 
 ### Configuration
 
@@ -277,17 +280,25 @@ The `service_role` / secret key must never appear in this repo, and never in a
 `VITE_`-prefixed variable: Vite inlines every one of those into the client
 bundle.
 
-### Why the SDK is loaded on demand
+### Why there is no Supabase SDK
 
-`@supabase/supabase-js` is 62 kB gzipped. Imported normally it took the main
-bundle from 115 kB to 178 kB — a 54% increase on the first load of a page whose
-job above the fold is a video and a menu, for a feature most visitors never open.
-So the anonymous menu read goes through a plain `fetch` against PostgREST
-(`restSelect` in `src/lib/supabase.js`; two headers and a query string is the
-whole protocol), and the SDK is dynamically imported only when someone starts
-ordering — warmed the moment the first item enters the cart, so it has arrived by
-the time the drawer is opened. The main bundle is 119 kB, and the SDK plus drawer
-are separate chunks.
+`@supabase/supabase-js` is 62 kB gzipped — auth, realtime, storage and postgrest
+in one package. This site needs to GET two tables and POST to two functions, and
+both are a few lines of `fetch` against PostgREST directly (`lib/supabase.js`).
+
+It was carried, lazily loaded, for as long as customers had to sign in. Once
+ordering became name-and-phone there was no session to manage, no token to
+refresh and no socket to hold open, and the dependency went with it.
+
+Total JavaScript, gzipped, over the life of this feature:
+
+| | Main | Other chunks | Total |
+| --- | --- | --- | --- |
+| Static brand site, before any backend | 115 kB | — | **115 kB** |
+| With accounts, SDK lazy-loaded | 123 kB | 61 kB | **184 kB** |
+| Guest ordering, no SDK | 119 kB | 3 kB | **122 kB** |
+
+A complete ordering system for about 7 kB over the brochure it started as.
 
 ### Order notifications by email
 
@@ -451,14 +462,15 @@ The logo, photography and menu are real. These are not:
 
 Also outstanding before taking real orders:
 
-1. Put `{{ .Token }}` in **both** the *Confirm signup* and *Magic Link* email
-   templates, or nobody can sign in — see [Sign-in](#sign-in). This is the one
-   that blocks everything else.
+1. Run `supabase/migrations/20260730070000_guest_orders.sql` against the project.
+   Until it is applied, `place_order` still demands a signed-in user and every
+   checkout fails — this is the one that blocks everything else.
 2. Deploy `notify-order` and set its secrets, or orders arrive silently — see
-   [Order notifications by email](#order-notifications-by-email).
-3. Add at least one row to `staff` so somebody can see the order queue.
-4. Optional, and only if you want the email links to work as well as the codes:
-   set Site URL and Redirect URLs to the deployed address.
+   [Order notifications by email](#order-notifications-by-email). Without it the
+   only place an order appears is the dashboard.
+
+No auth configuration is needed: nobody signs in. See
+[Accounts (there are none)](#accounts-there-are-none).
 
 ## Deploying
 
