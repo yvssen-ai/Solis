@@ -102,6 +102,42 @@ export async function rpc(fn, args) {
 }
 
 /* ------------------------------------------------------------------------- */
+/* Card payments                                                             */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Ask the server to start a card payment, and get back somewhere to send the
+ * customer.
+ *
+ * Note what is not in this call: an amount. The function reads the total from
+ * the order row, so there is no number here for anyone to edit. The order id and
+ * its receipt token are all the browser is trusted with.
+ */
+export async function startCardPayment(orderId, publicToken) {
+  if (!isSupabaseConfigured) throw new Error('Card payment is not available right now.');
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/create-payment`, {
+    method: 'POST',
+    headers: {
+      apikey: PUBLISHABLE_KEY,
+      authorization: `Bearer ${PUBLISHABLE_KEY}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ order_id: orderId, public_token: publicToken }),
+  });
+
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok || !body?.checkout_url) {
+    const error = new Error(body?.error || `Payment could not be started (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
+
+  return body.checkout_url;
+}
+
+/* ------------------------------------------------------------------------- */
 /* Money                                                                     */
 /* ------------------------------------------------------------------------- */
 

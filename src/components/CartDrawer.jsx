@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { gsap, useGSAP, ScrollSmoother, prefersReducedMotion } from '../lib/gsap';
-import { rpc, formatPiastres, friendlyError } from '../lib/supabase';
+import { rpc, formatPiastres, friendlyError, startCardPayment } from '../lib/supabase';
 import { useCart } from '../context/CartContext';
 import { rememberToken } from '../lib/orderTokens';
 import { CURRENCY } from '../data/menu';
@@ -35,6 +35,7 @@ export default function CartDrawer() {
     fulfilment: 'pickup',
     address: '',
     notes: '',
+    payment: 'cash',
   });
 
   /* ---- Open / close ----------------------------------------------------- */
@@ -164,6 +165,16 @@ export default function CartDrawer() {
          Store it before anything else touches state — if the drawer closed or
          the tab died right here, the order would otherwise be untrackable. */
       rememberToken(order?.public_token);
+
+      /* Paying by card leaves the site. The order already exists and is already
+         tracked, so a customer who abandons the card page still has an order the
+         counter can see — unpaid, which is the truth. */
+      if (form.payment === 'card') {
+        const checkoutUrl = await startCardPayment(order.id, order.public_token);
+        clear();
+        window.location.assign(checkoutUrl);
+        return; // leaving; do not fall through to the receipt view
+      }
 
       setPlaced(order);
       clear();
@@ -306,6 +317,32 @@ export default function CartDrawer() {
         ))}
       </fieldset>
 
+      <fieldset className="shop__choice">
+        <legend className="shop__label">How are you paying?</legend>
+        {[
+          { value: 'cash', label: 'Cash' },
+          { value: 'card', label: 'Card' },
+        ].map((option) => (
+          <label key={option.value} className="shop__radio">
+            <input
+              type="radio"
+              name="payment"
+              value={option.value}
+              checked={form.payment === option.value}
+              onChange={() => setForm({ ...form, payment: option.value })}
+            />
+            <span>{option.label}</span>
+          </label>
+        ))}
+      </fieldset>
+
+      {form.payment === 'card' && (
+        <p className="shop__muted shop__note">
+          You'll be taken to our payment provider to enter your card, then brought
+          back here. Visa, Mastercard and Meeza.
+        </p>
+      )}
+
       {form.fulfilment === 'delivery' && (
         <>
           <label className="shop__label" htmlFor="solis-address">
@@ -346,11 +383,19 @@ export default function CartDrawer() {
         type="submit"
         disabled={busy || !canSubmit}
       >
-        {busy ? 'Sending…' : 'Place order'}
+        {busy
+          ? form.payment === 'card'
+            ? 'Taking you to payment…'
+            : 'Sending…'
+          : form.payment === 'card'
+            ? `Pay ${CURRENCY} ${formatPiastres(subtotalPiastres)} by card`
+            : 'Place order'}
       </button>
 
       <p className="shop__hint">
-        Pay when you collect — cash, card or Vodafone Cash at the counter.
+        {form.payment === 'card'
+          ? 'Your card is entered on our payment provider’s page — it never touches this site.'
+          : 'Pay when you collect — cash, card or Vodafone Cash at the counter.'}
       </p>
 
       {error && (

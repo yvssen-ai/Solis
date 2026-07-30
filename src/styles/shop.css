@@ -497,6 +497,14 @@ body.cart-open .cart-fab {
   font-size: var(--t-sm);
 }
 
+/* Sits directly under the card radio, so it wants the tight spacing of a form
+   caption rather than .shop__muted's standalone padding. Doubled class beats
+   .shop__muted on specificity without reaching for !important. */
+.shop__note.shop__note {
+  padding: 0 0 0.4rem;
+  font-size: var(--t-xs);
+}
+
 .shop__auth-lede {
   padding-top: 1.4rem;
   font-size: var(--t-base);
