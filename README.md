@@ -480,20 +480,21 @@ with `NOT_FOUND`, the branch it is building does not contain this code.
 
 ---
 
-## Card payments (Paymob)
+
+## Card payments (Kashier)
 
 Cards are optional. Leave the secrets unset and checkout still works — the card
-option simply returns "Card payments are not switched on yet", and cash on
-pickup is unaffected.
+option returns "Card payments are not switched on yet", and cash on pickup is
+unaffected.
 
 ### The flow
 
 ```
-place_order            → order exists, unpaid, total computed from menu_items
-create-payment         → reads that total FROM THE DATABASE, asks Paymob for a
-                         checkout page, returns its URL
-customer               → enters the card on Paymob's page, never on this site
-paymob-webhook         → Paymob calls us, signed; only this marks the order paid
+place_order       → order exists, unpaid, total computed from menu_items
+create-payment    → reads that total FROM THE DATABASE, signs a Kashier
+                    checkout URL, returns it
+customer          → enters the card on Kashier's page, never on this site
+kashier-webhook   → Kashier calls us, signed; only this marks the order paid
 ```
 
 Three things this arrangement buys, and each is the reason for a design choice
@@ -502,6 +503,7 @@ that would otherwise look fussy:
 - **The browser never sends an amount.** `create-payment` takes an order id and
   its receipt token, nothing else. There is no number in the request for anyone
   to edit, which is the same guarantee `place_order` already gives on prices.
+  The URL it builds is signed, so the amount cannot be edited in transit either.
 - **The redirect back proves nothing.** Anyone can type the return URL, so the
   return is only ever a cue to re-read the order. The webhook is the record.
 - **Replays are harmless.** Gateways retry. The unique index on
@@ -510,39 +512,48 @@ that would otherwise look fussy:
 
 ### Setting it up
 
-1. Sign up at [paymob.com](https://paymob.com) and stay in **test mode** — no
-   business registration is needed to test, and test cards are in their docs.
-2. From the dashboard take: the **secret key**, the **public key**, the **card
-   integration id**, and the **HMAC secret**.
-3. Give them to Supabase — never to Vite, which compiles its variables into the
+1. In the Kashier dashboard (portal.kashier.io → Integration) take:
+   - the **Merchant ID**, shown under the shop name, `MID-xxxxx-xxx`
+   - a **Payment API Key** — the one used to sign order hashes
+2. Give them to Supabase — never to Vite, which compiles its variables into the
    browser bundle:
 
    ```bash
    supabase secrets set \
-     PAYMOB_SECRET_KEY=sk_test_… \
-     PAYMOB_PUBLIC_KEY=egy_pk_test_… \
-     PAYMOB_INTEGRATION_ID=1234567 \
-     PAYMOB_HMAC_SECRET=… \
+     KASHIER_MERCHANT_ID=MID-xxxxx-xxx \
+     KASHIER_PAYMENT_KEY=… \
+     KASHIER_MODE=test \
      SITE_URL=https://solis-azure.vercel.app
    ```
 
-4. Deploy both functions. The webhook takes `--no-verify-jwt` because Paymob
-   calls it, not a signed-in user; it authenticates itself with the HMAC instead.
+3. Deploy both functions. The webhook takes `--no-verify-jwt` because Kashier
+   calls it, not a signed-in user; it authenticates itself with the signature.
 
    ```bash
    supabase functions deploy create-payment
-   supabase functions deploy paymob-webhook --no-verify-jwt
+   supabase functions deploy kashier-webhook --no-verify-jwt
    ```
 
-5. In Paymob, set the **Transaction Processed Callback** to
-   `https://<project>.supabase.co/functions/v1/paymob-webhook`.
-6. Apply the migration: `supabase db push`.
+4. Apply the migration: `supabase db push`.
+5. Test with Kashier's test cards, listed in their docs. `KASHIER_MODE=test`
+   keeps every transaction in the sandbox.
 
 ### Going live
 
-Swap the test keys for live ones. That is the only code-facing change — but the
-account behind them needs a commercial register, a tax card and a company bank
-account, which is the café's paperwork, not the site's.
+Set `KASHIER_MODE=live` and swap in the live Payment API Key. That is the only
+code-facing change — but the account behind it needs Kashier's application
+completed (commercial register, tax card, company bank account), which is the
+café's paperwork, not the site's.
+
+### If the webhook rejects everything
+
+The signature is computed over the callback's own fields, joined `&key=value`,
+excluding `signature` and `mode`. If Kashier changes that field list the hash
+stops matching and every callback 401s — orders would then sit at `pending`
+forever while the money has actually been taken. The rejection logs the string
+it hashed and the two hashes, so compare that log against the current docs
+before touching anything else. This is the first place to look if payments
+appear to succeed for the customer but never confirm on the site.
 
 ### What is deliberately not here
 
